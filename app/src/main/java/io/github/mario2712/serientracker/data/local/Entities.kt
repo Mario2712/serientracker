@@ -14,6 +14,8 @@ import io.github.mario2712.serientracker.domain.Watcher
 data class SeriesEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String,
+    /** Original title from TMDB (e.g. "The Queen's Gambit" for "Damengambit"). */
+    val originalTitle: String? = null,
     val status: WatchStatus = WatchStatus.PLAN_TO_WATCH,
     /** 1..10, null = not rated. */
     val rating: Int? = null,

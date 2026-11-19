@@ -224,6 +224,9 @@ private fun Header(data: SeriesWithSeasons, watched: Int, total: Int, message: S
                 Spacer(Modifier.width(16.dp))
             }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                series.originalTitle?.takeIf { !it.equals(series.title, ignoreCase = true) }?.let {
+                    Text("Originaltitel: $it", style = MaterialTheme.typography.bodyMedium)
+                }
                 StatusChip(series.status)
                 val facts = listOfNotNull(
                     series.watcher?.let { "Wer: ${it.label}" },

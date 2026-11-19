@@ -124,9 +124,19 @@ fun EditSeriesScreen(
             }
 
             OutlinedTextField(
+                value = form.originalTitle,
+                onValueChange = { v -> viewModel.update { it.copy(originalTitle = v) } },
+                label = { Text("Originaltitel") },
+                supportingText = { Text("Wird beim TMDB-Abgleich automatisch gesetzt") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            OutlinedTextField(
                 value = form.genre,
                 onValueChange = { v -> viewModel.update { it.copy(genre = v) } },
                 label = { Text("Genre") },
+                supportingText = { Text("Kommt beim TMDB-Abgleich von TMDB, z. B. „Drama, Krimi“") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )

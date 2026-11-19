@@ -30,6 +30,7 @@ data class Backup(
 @Serializable
 data class BackupSeries(
     val title: String,
+    val originalTitle: String? = null,
     val status: WatchStatus = WatchStatus.PLAN_TO_WATCH,
     val rating: Int? = null,
     val streamingService: String? = null,
@@ -122,6 +123,7 @@ class BackupRepository(
         val id = seriesDao.insert(
             SeriesEntity(
                 title = b.title,
+                originalTitle = b.originalTitle,
                 status = b.status,
                 rating = b.rating,
                 streamingService = b.streamingService,
@@ -177,6 +179,7 @@ class BackupRepository(
         val s = d.series
         return BackupSeries(
             title = s.title,
+            originalTitle = s.originalTitle,
             status = s.status,
             rating = s.rating,
             streamingService = s.streamingService,

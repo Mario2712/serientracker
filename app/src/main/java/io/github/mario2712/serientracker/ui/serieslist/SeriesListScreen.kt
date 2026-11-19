@@ -219,6 +219,15 @@ private fun SeriesRow(item: SeriesOverview, onClick: () -> Unit, onWatchNext: ()
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                item.series.originalTitle?.takeIf { !it.equals(item.series.title, ignoreCase = true) }?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     StatusChip(item.series.status)

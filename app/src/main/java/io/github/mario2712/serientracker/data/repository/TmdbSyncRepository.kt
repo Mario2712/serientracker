@@ -141,9 +141,15 @@ class TmdbSyncRepository(
         } else {
             series.status
         }
+        // Genre and original title come from TMDB when the show is linked (or was linked before
+        // these fields existed). Later refreshes keep a genre the user edited by hand.
+        val fillMeta = series.tmdbId != show.id || series.originalTitle == null
+        val tmdbGenre = show.genres.joinToString(", ").ifBlank { null }
         seriesDao.update(
             series.copy(
                 tmdbId = show.id,
+                originalTitle = show.originalName.ifBlank { show.name }.ifBlank { null } ?: series.originalTitle,
+                genre = if (fillMeta) tmdbGenre ?: series.genre else series.genre,
                 posterUrl = show.posterUrl ?: series.posterUrl,
                 isEnded = show.isEnded,
                 nextAirDate = show.nextAirDate.toEpochDay() ?: series.nextAirDate,

@@ -88,6 +88,7 @@ class TmdbClient(private val apiKey: suspend () -> String?) : TmdbDataSource {
                 status = info.status,
                 posterUrl = info.posterPath?.let { Tmdb.posterUrl(it) },
                 nextAirDate = info.nextEpisodeToAir?.airDate,
+                genres = info.genres.map { it.name.trim() }.filter { it.isNotEmpty() },
                 seasons = seasons.values
                     .sortedBy { it.seasonNumber }
                     .map { s ->

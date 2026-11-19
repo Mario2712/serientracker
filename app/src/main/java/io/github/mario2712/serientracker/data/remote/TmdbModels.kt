@@ -30,7 +30,11 @@ data class TmdbShowJson(
     @SerialName("poster_path") val posterPath: String? = null,
     val seasons: List<TmdbSeasonSummaryJson> = emptyList(),
     @SerialName("next_episode_to_air") val nextEpisodeToAir: TmdbEpisodeJson? = null,
+    val genres: List<TmdbGenreJson> = emptyList(),
 )
+
+@Serializable
+data class TmdbGenreJson(val id: Int = 0, val name: String = "")
 
 @Serializable
 data class TmdbSeasonSummaryJson(
@@ -65,6 +69,8 @@ data class TmdbShow(
     val posterUrl: String?,
     val nextAirDate: String?,
     val seasons: List<TmdbSeason>,
+    /** German genre names (language=de-DE), e.g. "Drama", "Krimi", "Sci-Fi & Fantasy". */
+    val genres: List<String> = emptyList(),
 ) {
     val isEnded: Boolean? get() = status?.let { it == "Ended" || it == "Canceled" }
 

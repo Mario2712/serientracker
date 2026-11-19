@@ -40,7 +40,11 @@ class SeriesListViewModel(private val repository: SeriesRepository) : ViewModel(
             // Status counts follow the "Wer" filter and the search, so the chips match the list.
             val visible = all
                 .filter { w == null || w.accepts(it.series.watcher) }
-                .filter { q.isBlank() || it.series.title.contains(q.trim(), ignoreCase = true) }
+                .filter {
+                    q.isBlank() ||
+                        it.series.title.contains(q.trim(), ignoreCase = true) ||
+                        it.series.originalTitle?.contains(q.trim(), ignoreCase = true) == true
+                }
             SeriesListUiState(
                 items = visible.filter { f == null || it.series.status == f },
                 filter = f,

@@ -103,6 +103,9 @@ class SyncFlowTest {
         assertNull(stored.importProgress)
         assertEquals(100, stored.series.tmdbId)
         assertEquals(WatchStatus.PAUSED, stored.series.status)
+        // Genre and original title come from TMDB (Excel said "Mystery").
+        assertEquals("Sci-Fi & Fantasy, Drama", stored.series.genre)
+        assertEquals("12 Monkeys", stored.series.originalTitle)
         val s1 = stored.seasons.first { it.season.number == 1 }.episodes.sortedBy { it.number }
         assertEquals(listOf(true, true, false), s1.take(3).map { it.isWatched })
         assertEquals("Folge 1", s1.first().title)
@@ -130,11 +133,16 @@ class SyncFlowTest {
         val monkeys = db.seriesDao().getAll().first { it.title == "12 Monkeys" }
         sync.link(monkeys.id, 100)
 
+        // A genre edited by hand survives later refreshes.
+        val linked = db.seriesDao().getSeries(monkeys.id)!!
+        db.seriesDao().update(linked.copy(genre = "Zeitreise"))
+
         fake.extraEpisodes = 3
         val report = sync.refresh(monkeys.id)!!
 
         assertEquals(50, report.total)
         assertEquals(2, report.watched)
+        assertEquals("Zeitreise", db.seriesDao().getSeries(monkeys.id)!!.genre)
     }
 
     @Test
@@ -176,6 +184,7 @@ class SyncFlowTest {
             status = status,
             posterUrl = null,
             nextAirDate = null,
+            genres = listOf("Sci-Fi & Fantasy", "Drama"),
             seasons = buildList {
                 if (specials > 0) add(TmdbSeason(0, "Specials", episodes(specials)))
                 perSeason.forEachIndexed { i, n -> add(TmdbSeason(i + 1, null, episodes(n))) }
