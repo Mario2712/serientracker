@@ -14,6 +14,7 @@ fun StatusChip(status: WatchStatus, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
     val (bg, fg) = when (status) {
         WatchStatus.WATCHING -> colors.primaryContainer to colors.onPrimaryContainer
+        WatchStatus.CAUGHT_UP -> colors.primary to colors.onPrimary
         WatchStatus.PLAN_TO_WATCH -> colors.secondaryContainer to colors.onSecondaryContainer
         WatchStatus.COMPLETED -> colors.tertiaryContainer to colors.onTertiaryContainer
         WatchStatus.PAUSED -> colors.surfaceVariant to colors.onSurfaceVariant

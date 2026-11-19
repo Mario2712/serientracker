@@ -7,19 +7,27 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.mario2712.serientracker.data.local.SeriesEntity
+import io.github.mario2712.serientracker.data.remote.TmdbSearchResult
 import io.github.mario2712.serientracker.data.repository.SeriesRepository
+import io.github.mario2712.serientracker.data.repository.TmdbSyncRepository
 import io.github.mario2712.serientracker.domain.WatchStatus
+import io.github.mario2712.serientracker.domain.Watcher
 import io.github.mario2712.serientracker.ui.navigation.Routes
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 
 data class EditSeriesForm(
     val title: String = "",
     val status: WatchStatus = WatchStatus.PLAN_TO_WATCH,
+    val watcher: Watcher? = null,
+    val genre: String = "",
     val streamingService: String = "",
     val rating: Int? = null,
     val notes: String = "",
     /** Episode count per season as typed, index 0 = season 1. */
     val seasons: List<String> = listOf(""),
+    /** New series: TMDB show to take the seasons and episodes from. */
+    val tmdbPick: TmdbSearchResult? = null,
 ) {
     val isValid: Boolean get() = title.isNotBlank()
 }
@@ -27,6 +35,7 @@ data class EditSeriesForm(
 class EditSeriesViewModel(
     savedStateHandle: SavedStateHandle,
     private val repository: SeriesRepository,
+    private val syncRepository: TmdbSyncRepository,
 ) : ViewModel() {
 
     private val seriesId: Long = savedStateHandle[Routes.ARG_SERIES_ID] ?: 0L
@@ -37,6 +46,18 @@ class EditSeriesViewModel(
     var form by mutableStateOf(EditSeriesForm())
         private set
     var isLoading by mutableStateOf(!isNew)
+        private set
+    var isSaving by mutableStateOf(false)
+        private set
+    var error by mutableStateOf<String?>(null)
+        private set
+
+    /** Existing series linked to TMDB: seasons come from there and are not edited here. */
+    val seasonsFromTmdb: Boolean get() = original?.tmdbId != null || form.tmdbPick != null
+
+    var tmdbQuery by mutableStateOf("")
+        private set
+    var tmdbResults by mutableStateOf<List<TmdbSearchResult>>(emptyList())
         private set
 
     init {
@@ -49,6 +70,8 @@ class EditSeriesViewModel(
                     form = EditSeriesForm(
                         title = s.title,
                         status = s.status,
+                        watcher = s.watcher,
+                        genre = s.genre.orEmpty(),
                         streamingService = s.streamingService.orEmpty(),
                         rating = s.rating,
                         notes = s.notes.orEmpty(),
@@ -61,6 +84,29 @@ class EditSeriesViewModel(
     }
 
     fun update(transform: (EditSeriesForm) -> EditSeriesForm) { form = transform(form) }
+
+    fun onTmdbQueryChange(text: String) { tmdbQuery = text }
+
+    fun searchTmdb() {
+        val q = tmdbQuery.trim().ifEmpty { form.title.trim() }
+        if (q.isEmpty()) return
+        viewModelScope.launch {
+            error = null
+            tmdbResults = try {
+                syncRepository.search(q)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                error = "TMDB-Suche fehlgeschlagen: ${e.message ?: e::class.simpleName}"
+                emptyList()
+            }
+        }
+    }
+
+    fun pickTmdb(result: TmdbSearchResult?) {
+        tmdbResults = emptyList()
+        update { it.copy(tmdbPick = result, title = if (result != null && it.title.isBlank()) result.name else it.title) }
+    }
 
     fun addSeason() = update { it.copy(seasons = it.seasons + "") }
 
@@ -78,12 +124,29 @@ class EditSeriesViewModel(
         val entity = base.copy(
             title = f.title.trim(),
             status = f.status,
+            watcher = f.watcher,
+            genre = f.genre.trim().ifEmpty { null },
             streamingService = f.streamingService.trim().ifEmpty { null },
             rating = f.rating,
             notes = f.notes.trim().ifEmpty { null },
         )
         // Trailing empty season fields are ignored; empty fields in between count as 0 episodes.
         val counts = f.seasons.map { it.toIntOrNull() ?: 0 }.dropLastWhile { it == 0 }
-        viewModelScope.launch { onSaved(repository.save(entity, counts)) }
+        if (isSaving) return
+        viewModelScope.launch {
+            isSaving = true
+            val id = repository.save(entity, if (f.tmdbPick != null) emptyList() else counts)
+            f.tmdbPick?.let { pick ->
+                try {
+                    syncRepository.link(id, pick.id)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Saved anyway; the series can be matched later from its detail screen.
+                }
+            }
+            isSaving = false
+            onSaved(id)
+        }
     }
 }

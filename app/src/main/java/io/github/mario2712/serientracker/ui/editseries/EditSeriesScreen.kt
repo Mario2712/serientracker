@@ -39,6 +39,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.mario2712.serientracker.domain.WatchStatus
+import io.github.mario2712.serientracker.domain.Watcher
+import io.github.mario2712.serientracker.ui.tmdbsync.CandidateRow
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Card
 import io.github.mario2712.serientracker.ui.AppViewModelProvider
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -61,7 +66,7 @@ fun EditSeriesScreen(
                 },
                 actions = {
                     TextButton(
-                        enabled = form.isValid && !viewModel.isLoading,
+                        enabled = form.isValid && !viewModel.isLoading && !viewModel.isSaving,
                         onClick = { viewModel.save { id -> onDone(id, viewModel.isNew) } },
                     ) { Text("Speichern") }
                 },
@@ -92,6 +97,10 @@ fun EditSeriesScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            if (viewModel.isNew) {
+                TmdbSection(viewModel)
+            }
+
             Text("Status", style = MaterialTheme.typography.titleSmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 WatchStatus.entries.forEach { status ->
@@ -103,28 +112,33 @@ fun EditSeriesScreen(
                 }
             }
 
-            Text("Staffeln & Folgen", style = MaterialTheme.typography.titleSmall)
-            form.seasons.forEachIndexed { index, value ->
-                OutlinedTextField(
-                    value = value,
-                    onValueChange = { viewModel.setSeasonEpisodes(index, it) },
-                    label = { Text("Staffel ${index + 1}: Anzahl Folgen") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-                    modifier = Modifier.fillMaxWidth(),
-                )
+            Text("Wer schaut?", style = MaterialTheme.typography.titleSmall)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Watcher.entries.forEach { w ->
+                    FilterChip(
+                        selected = form.watcher == w,
+                        onClick = { viewModel.update { it.copy(watcher = if (it.watcher == w) null else w) } },
+                        label = { Text(w.label) },
+                    )
+                }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = viewModel::addSeason) {
-                    Icon(Icons.Filled.Add, contentDescription = null)
-                    Text(" Staffel")
-                }
-                if (form.seasons.isNotEmpty()) {
-                    OutlinedButton(onClick = viewModel::removeLastSeason) {
-                        Icon(Icons.Filled.Delete, contentDescription = null)
-                        Text(" Letzte Staffel")
-                    }
-                }
+
+            OutlinedTextField(
+                value = form.genre,
+                onValueChange = { v -> viewModel.update { it.copy(genre = v) } },
+                label = { Text("Genre") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            if (viewModel.seasonsFromTmdb) {
+                Text(
+                    "Staffeln und Folgen kommen von TMDB.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                SeasonFields(viewModel)
             }
 
             OutlinedTextField(
@@ -158,6 +172,67 @@ fun EditSeriesScreen(
                 minLines = 3,
                 modifier = Modifier.fillMaxWidth(),
             )
+        }
+    }
+}
+
+@Composable
+private fun SeasonFields(viewModel: EditSeriesViewModel) {
+    val form = viewModel.form
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text("Staffeln & Folgen", style = MaterialTheme.typography.titleSmall)
+        form.seasons.forEachIndexed { index, value ->
+            OutlinedTextField(
+                value = value,
+                onValueChange = { viewModel.setSeasonEpisodes(index, it) },
+                label = { Text("Staffel ${index + 1}: Anzahl Folgen") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = viewModel::addSeason) {
+                Icon(Icons.Filled.Add, contentDescription = null)
+                Text(" Staffel")
+            }
+            if (form.seasons.isNotEmpty()) {
+                OutlinedButton(onClick = viewModel::removeLastSeason) {
+                    Icon(Icons.Filled.Delete, contentDescription = null)
+                    Text(" Letzte Staffel")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TmdbSection(viewModel: EditSeriesViewModel) {
+    val pick = viewModel.form.tmdbPick
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Von TMDB übernehmen", style = MaterialTheme.typography.titleSmall)
+            if (pick != null) {
+                CandidateRow(pick) {}
+                TextButton(onClick = { viewModel.pickTmdb(null) }) { Text("Andere wählen") }
+            } else {
+                OutlinedTextField(
+                    value = viewModel.tmdbQuery,
+                    onValueChange = viewModel::onTmdbQueryChange,
+                    label = { Text("Serie suchen") },
+                    singleLine = true,
+                    trailingIcon = {
+                        IconButton(onClick = viewModel::searchTmdb) {
+                            Icon(Icons.Filled.Search, contentDescription = "Suchen")
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { viewModel.searchTmdb() }),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                viewModel.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                viewModel.tmdbResults.take(5).forEach { r -> CandidateRow(r) { viewModel.pickTmdb(r) } }
+            }
         }
     }
 }

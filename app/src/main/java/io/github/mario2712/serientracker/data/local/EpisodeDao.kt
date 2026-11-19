@@ -14,6 +14,15 @@ interface EpisodeDao {
     @Insert
     suspend fun insertSeason(season: SeasonEntity): Long
 
+    @Query("UPDATE seasons SET title = :title WHERE id = :seasonId")
+    suspend fun setSeasonTitle(seasonId: Long, title: String?)
+
+    @Query("SELECT * FROM episodes WHERE seasonId = :seasonId ORDER BY number")
+    suspend fun getEpisodes(seasonId: Long): List<EpisodeEntity>
+
+    @Query("UPDATE episodes SET title = :title, airDate = :airDate WHERE id = :episodeId")
+    suspend fun setEpisodeInfo(episodeId: Long, title: String?, airDate: Long?)
+
     @Query("DELETE FROM seasons WHERE seriesId = :seriesId AND number > :maxNumber")
     suspend fun deleteSeasonsAbove(seriesId: Long, maxNumber: Int)
 
@@ -43,7 +52,7 @@ interface EpisodeDao {
     @Query(
         """
         SELECT e.* FROM episodes e JOIN seasons se ON e.seasonId = se.id
-        WHERE se.seriesId = :seriesId AND e.watchedAt IS NULL
+        WHERE se.seriesId = :seriesId AND se.number > 0 AND e.watchedAt IS NULL
         ORDER BY se.number, e.number LIMIT 1
         """,
     )

@@ -16,6 +16,26 @@ Jeder Push baut die App über GitHub Actions und stellt sie zum Download bereit.
 
 Alternativ: Unter **Actions → letzter Lauf → Artifacts** liegt die APK als ZIP.
 
+## Erster Start: Excel-Liste + TMDB
+
+1. Beim ersten Start lädt die App automatisch deine Excel-Liste (Blatt „Serien“, 361 Serien)
+   aus `app/src/main/assets/seed/serien.json`.
+2. Für exakte Staffeln und Folgen einen kostenlosen **TMDB-API-Key** holen:
+   Account auf [themoviedb.org](https://www.themoviedb.org/signup) anlegen →
+   Einstellungen → API → „API-Schlüssel“ (oder „API-Lesezugriffstoken“) kopieren.
+3. In der App: **Menü (⋮) → Einstellungen** → Key einfügen → „Speichern & prüfen“.
+4. **Menü → TMDB-Abgleich → Abgleich starten.** Eindeutige Treffer werden automatisch übernommen
+   und bis zu deinem Excel-Stand abgehakt. Den Rest unter „Bitte prüfen“ ordnest du selbst zu.
+
+### Excel aktualisieren
+
+```bash
+pip install openpyxl
+python3 tools/convert_excel.py ~/Downloads/Serienliste.xlsx   # schreibt serien.json neu
+```
+Danach committen und pushen. In der App holt **Einstellungen → Auf Excel-Stand zurücksetzen**
+die neue Liste. Achtung: Dabei geht der Fortschritt verloren, der nur in der App erfasst wurde.
+
 ## Lokal bauen
 
 Voraussetzung: JDK 17+ und ein Android SDK (Android Studio installiert beides).

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -49,11 +50,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.mario2712.serientracker.data.local.ImportProgressEntity
 import io.github.mario2712.serientracker.data.local.SeasonWithEpisodes
 import io.github.mario2712.serientracker.data.local.SeriesWithSeasons
 import io.github.mario2712.serientracker.data.local.isWatched
 import io.github.mario2712.serientracker.domain.Progress
 import io.github.mario2712.serientracker.ui.AppViewModelProvider
+import io.github.mario2712.serientracker.ui.components.Poster
 import io.github.mario2712.serientracker.ui.components.StatusChip
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,6 +64,7 @@ import io.github.mario2712.serientracker.ui.components.StatusChip
 fun SeriesDetailScreen(
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
+    onMatch: (Long) -> Unit,
     viewModel: SeriesDetailViewModel = viewModel(factory = AppViewModelProvider.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -77,7 +81,13 @@ fun SeriesDetailScreen(
                     }
                 },
                 actions = {
-                    if (state is SeriesDetailUiState.Loaded) {
+                    val loaded = state as? SeriesDetailUiState.Loaded
+                    if (loaded?.data?.series?.tmdbId != null) {
+                        IconButton(onClick = viewModel::refreshFromTmdb, enabled = !viewModel.refreshing) {
+                            Icon(Icons.Filled.Refresh, contentDescription = "Von TMDB aktualisieren")
+                        }
+                    }
+                    if (loaded != null) {
                         IconButton(onClick = { onEdit(viewModel.seriesId) }) {
                             Icon(Icons.Filled.Edit, contentDescription = "Bearbeiten")
                         }
@@ -97,6 +107,8 @@ fun SeriesDetailScreen(
                     Text("Serie nicht gefunden.", Modifier.align(Alignment.Center))
                 is SeriesDetailUiState.Loaded -> DetailContent(
                     data = s.data,
+                    message = viewModel.message,
+                    onMatch = { onMatch(viewModel.seriesId) },
                     onWatchNext = viewModel::watchNext,
                     onToggleEpisode = viewModel::toggleEpisode,
                     onToggleSeason = viewModel::toggleSeason,
@@ -124,57 +136,42 @@ fun SeriesDetailScreen(
 @Composable
 private fun DetailContent(
     data: SeriesWithSeasons,
+    message: String?,
+    onMatch: () -> Unit,
     onWatchNext: () -> Unit,
     onToggleEpisode: (Long, Boolean) -> Unit,
     onToggleSeason: (Long, Boolean) -> Unit,
 ) {
     val all = data.seasons.flatMap { s -> s.episodes.map { s.season.number to it } }
     val watched = all.count { it.second.isWatched }
-    val next = all.firstOrNull { !it.second.isWatched }
+    // "Next" follows the regular seasons; specials are ticked by hand.
+    val next = all.firstOrNull { it.first > 0 && !it.second.isWatched }
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    StatusChip(data.series.status)
-                    data.series.streamingService?.takeIf { it.isNotBlank() }?.let {
-                        Spacer(Modifier.width(8.dp))
-                        Text(it, style = MaterialTheme.typography.bodyMedium)
-                    }
-                    data.series.rating?.let {
-                        Spacer(Modifier.width(8.dp))
-                        Text("★ $it/10", style = MaterialTheme.typography.bodyMedium)
-                    }
+            Header(data = data, watched = watched, total = all.size, message = message)
+        }
+        data.importProgress?.let { ip ->
+            item { ExcelCard(ip, onMatch) }
+        }
+        if (next != null) {
+            item {
+                Button(onClick = onWatchNext, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.Check, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("${Progress.episodeCode(next.first, next.second.number)} gesehen")
                 }
-                Spacer(Modifier.height(12.dp))
-                Text("$watched von ${all.size} Folgen gesehen", style = MaterialTheme.typography.bodyLarge)
-                Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = { Progress.fraction(watched, all.size) },
-                    modifier = Modifier.fillMaxWidth(),
+            }
+        }
+        if (data.seasons.isEmpty() && data.importProgress == null) {
+            item {
+                Text(
+                    "Noch keine Staffeln angelegt. Tippe auf Bearbeiten, um Staffeln und Folgen hinzuzufügen.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (next != null) {
-                    Spacer(Modifier.height(12.dp))
-                    Button(onClick = onWatchNext, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Filled.Check, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("${Progress.episodeCode(next.first, next.second.number)} gesehen")
-                    }
-                }
-                data.series.notes?.takeIf { it.isNotBlank() }?.let {
-                    Spacer(Modifier.height(12.dp))
-                    Text(it, style = MaterialTheme.typography.bodyMedium)
-                }
-                if (data.seasons.isEmpty()) {
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        "Noch keine Staffeln angelegt. Tippe auf Bearbeiten, um Staffeln und Folgen hinzuzufügen.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
         }
         items(data.seasons, key = { it.season.id }) { season ->
@@ -188,6 +185,81 @@ private fun DetailContent(
         }
     }
 }
+
+@Composable
+private fun Header(data: SeriesWithSeasons, watched: Int, total: Int, message: String?) {
+    val series = data.series
+    Column {
+        Row {
+            series.posterUrl?.let {
+                Poster(it, Modifier.width(96.dp).height(144.dp))
+                Spacer(Modifier.width(16.dp))
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                StatusChip(series.status)
+                val facts = listOfNotNull(
+                    series.watcher?.let { "Wer: ${it.label}" },
+                    series.genre,
+                    series.streamingService?.takeIf { it.isNotBlank() },
+                    series.rating?.let { "★ $it/10" },
+                )
+                if (facts.isNotEmpty()) Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
+                series.nextAirDate?.let {
+                    Text("Nächste Ausstrahlung: ${formatDate(it)}", style = MaterialTheme.typography.bodyMedium)
+                }
+                if (series.isEnded == true) Text("Serie beendet", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        if (total > 0) {
+            Text("$watched von $total Folgen gesehen", style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.height(8.dp))
+            LinearProgressIndicator(progress = { Progress.fraction(watched, total) }, modifier = Modifier.fillMaxWidth())
+        }
+        message?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+        }
+        series.notes?.takeIf { it.isNotBlank() }?.let {
+            Spacer(Modifier.height(12.dp))
+            Text(it, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+@Composable
+private fun ExcelCard(ip: ImportProgressEntity, onMatch: () -> Unit) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Stand aus der Excel", style = MaterialTheme.typography.titleMedium)
+            val lastSeason = ip.lastSeason
+            val lastEpisode = ip.lastEpisode
+            val last = if (lastSeason != null && lastSeason > 0 && lastEpisode != null) {
+                Progress.episodeCode(lastSeason, lastEpisode) +
+                    (ip.lastSpecial?.takeIf { it > 0 }?.let { " + Special $it" } ?: "")
+            } else {
+                "noch nichts"
+            }
+            Text("Zuletzt gesehen: $last")
+            if (ip.maxSeason != null) {
+                Text(
+                    "Verfügbar: ${ip.maxSeason} Staffeln, letzte mit ${ip.maxEpisode ?: "?"} Folgen" +
+                        (ip.maxSpecial?.takeIf { it > 0 }?.let { ", $it Specials" } ?: ""),
+                )
+            }
+            if (ip.total != null) Text("Gesehen: ${ip.watched ?: 0} von ${ip.total}")
+            Text(
+                "Die genaue Folgenliste kommt von TMDB.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(onClick = onMatch) { Text("Mit TMDB abgleichen") }
+        }
+    }
+}
+
+private fun formatDate(epochDay: Long): String =
+    java.time.LocalDate.ofEpochDay(epochDay).format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy"))
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -209,7 +281,7 @@ private fun SeasonCard(
         ) {
             Column(Modifier.weight(1f).padding(vertical = 12.dp)) {
                 Text(
-                    season.season.title ?: "Staffel ${season.season.number}",
+                    season.season.title ?: if (season.season.number == 0) "Specials" else "Staffel ${season.season.number}",
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text("$watched/$total", style = MaterialTheme.typography.bodySmall)

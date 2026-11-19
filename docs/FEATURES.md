@@ -12,7 +12,9 @@
 - ✅ Automatischer Statuswechsel (begonnen → Schaue ich, alles gesehen → Fertig)
 - ✅ Material You (Farben vom Pixel-Wallpaper), Dark Mode
 - ✅ Android-Backup der Datenbank (Google-Konto)
-- 🔜 **Import aus der bestehenden Excel-Datei**
+- ✅ **Excel-Liste als Startdaten** (361 Serien, Status-Mapping, Wer, Genre)
+- ✅ Status „Aufgeholt“ (alles gesehen, wartet auf neue Folgen)
+- ✅ Filter „Wer“: Meine / Johannas / Gemeinsam
 - 🔜 Export/Backup als JSON oder CSV (Datei teilen / in Drive speichern)
 - 🔜 Rückgängig-Snackbar nach dem Abhaken oder Löschen
 
@@ -25,8 +27,9 @@
 - 💡 „Bis hier gesehen“: lange auf eine Folge drücken → alle davor abhaken
 
 ## Online-Daten (TMDB, kostenloser API-Key)
-- 💡 Serie suchen und mit Poster, Staffeln und Folgenanzahl automatisch anlegen
-- 💡 Episodentitel und Ausstrahlungsdaten
+- ✅ Massenabgleich: exakte Staffeln/Folgen, Excel-Stand wird abgehakt, Prüfliste + Abweichungen
+- ✅ Serie per TMDB-Suche anlegen, Poster, Episodentitel und Ausstrahlungsdaten
+- ✅ Einzelne oder alle Serien aktualisieren (neue Folgen)
 - 💡 „Neue Folgen verfügbar“: wöchentliche Prüfung per WorkManager, mit Benachrichtigung
 - 💡 Wo läuft's? (Streaming-Anbieter für AT/DE)
 

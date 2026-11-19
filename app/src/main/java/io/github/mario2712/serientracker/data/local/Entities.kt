@@ -7,6 +7,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Relation
 import io.github.mario2712.serientracker.domain.WatchStatus
+import io.github.mario2712.serientracker.domain.Watcher
 
 @Entity(tableName = "series", indices = [Index("title")])
 data class SeriesEntity(
@@ -18,9 +19,19 @@ data class SeriesEntity(
     val streamingService: String? = null,
     val notes: String? = null,
     val isFavorite: Boolean = false,
-    /** Reserved for a later TMDB integration (posters, episode titles, air dates). */
+    val watcher: Watcher? = null,
+    val genre: String? = null,
+    /** TMDB id once the series was matched; episodes then come from TMDB. */
     val tmdbId: Int? = null,
     val posterUrl: String? = null,
+    /** TMDB: no more episodes will come (Ended/Canceled). null = unknown. */
+    val isEnded: Boolean? = null,
+    /** First air date of the last watched episode (epoch day), from Excel until episodes are known. */
+    val lastWatchedAirDate: Long? = null,
+    /** Next planned air date or latest episode (epoch day). */
+    val nextAirDate: Long? = null,
+    /** When the series info was last refreshed (epoch day, Excel "aktualisiert" or TMDB sync). */
+    val infoUpdatedAt: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
 )
@@ -69,6 +80,35 @@ data class EpisodeEntity(
 
 val EpisodeEntity.isWatched: Boolean get() = watchedAt != null
 
+/**
+ * Excel position of a series that has not been matched with TMDB yet.
+ * Deleted once the real episodes exist.
+ */
+@Entity(
+    tableName = "import_progress",
+    foreignKeys = [
+        ForeignKey(
+            entity = SeriesEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["seriesId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+)
+data class ImportProgressEntity(
+    @PrimaryKey val seriesId: Long,
+    val lastSeason: Int?,
+    val lastEpisode: Int?,
+    val lastSpecial: Int?,
+    val maxSeason: Int?,
+    val maxEpisode: Int?,
+    val maxSpecial: Int?,
+    val watched: Int?,
+    val total: Int?,
+    /** Excel "aktualisiert" as epoch ms, used as watchedAt for imported episodes. */
+    val updatedAt: Long?,
+)
+
 data class SeasonWithEpisodes(
     @Embedded val season: SeasonEntity,
     @Relation(parentColumn = "id", entityColumn = "seasonId")
@@ -79,13 +119,22 @@ data class SeriesWithSeasons(
     @Embedded val series: SeriesEntity,
     @Relation(entity = SeasonEntity::class, parentColumn = "id", entityColumn = "seriesId")
     val seasons: List<SeasonWithEpisodes>,
+    @Relation(parentColumn = "id", entityColumn = "seriesId")
+    val importProgress: ImportProgressEntity?,
 )
 
-/** One row of the series list, with progress computed in SQL. */
+/**
+ * One row of the series list, with progress computed in SQL.
+ * Without episodes (not matched with TMDB yet) the numbers come from the Excel import.
+ */
 data class SeriesOverview(
     @Embedded val series: SeriesEntity,
     val totalEpisodes: Int,
     val watchedEpisodes: Int,
     val nextSeason: Int?,
     val nextEpisode: Int?,
+    /** Last watched position from Excel; only set while [needsSync]. */
+    val excelSeason: Int?,
+    val excelEpisode: Int?,
+    val needsSync: Boolean,
 )

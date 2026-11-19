@@ -19,8 +19,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
@@ -32,9 +36,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -44,7 +52,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.mario2712.serientracker.data.local.SeriesOverview
 import io.github.mario2712.serientracker.domain.Progress
 import io.github.mario2712.serientracker.domain.WatchStatus
+import io.github.mario2712.serientracker.domain.WatcherFilter
 import io.github.mario2712.serientracker.ui.AppViewModelProvider
+import io.github.mario2712.serientracker.ui.components.Poster
 import io.github.mario2712.serientracker.ui.components.StatusChip
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,12 +62,35 @@ import io.github.mario2712.serientracker.ui.components.StatusChip
 fun SeriesListScreen(
     onSeriesClick: (Long) -> Unit,
     onAddClick: () -> Unit,
+    onSyncClick: () -> Unit,
+    onSettingsClick: () -> Unit,
     viewModel: SeriesListViewModel = viewModel(factory = AppViewModelProvider.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Serientracker") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Serientracker") },
+                actions = {
+                    var menuOpen by remember { mutableStateOf(false) }
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "Menü")
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("TMDB-Abgleich") },
+                            leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
+                            onClick = { menuOpen = false; onSyncClick() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Einstellungen") },
+                            onClick = { menuOpen = false; onSettingsClick() },
+                        )
+                    }
+                },
+            )
+        },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddClick) {
                 Icon(Icons.Filled.Add, contentDescription = "Serie hinzufügen")
@@ -80,11 +113,16 @@ fun SeriesListScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             )
+            if (state.unsyncedCount > 0) {
+                SyncBanner(count = state.unsyncedCount, onClick = onSyncClick)
+            }
             StatusFilterRow(
                 selected = state.filter,
                 counts = state.counts,
                 onSelect = viewModel::setFilter,
             )
+            Spacer(Modifier.height(4.dp))
+            WatcherFilterRow(selected = state.watcherFilter, onSelect = viewModel::setWatcherFilter)
             if (!state.isLoading && state.items.isEmpty()) {
                 EmptyState(hasFilter = state.filter != null || state.query.isNotBlank())
             } else {
@@ -133,9 +171,42 @@ private fun StatusFilterRow(
 }
 
 @Composable
+private fun SyncBanner(count: Int, onClick: () -> Unit) {
+    Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Row(Modifier.padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "$count Serien noch ohne exakte Folgen aus TMDB",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onClick) { Text("Abgleichen") }
+        }
+    }
+}
+
+@Composable
+private fun WatcherFilterRow(selected: WatcherFilter?, onSelect: (WatcherFilter?) -> Unit) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        item {
+            FilterChip(selected = selected == null, onClick = { onSelect(null) }, label = { Text("Alle") })
+        }
+        items(WatcherFilter.entries) { w ->
+            FilterChip(selected = selected == w, onClick = { onSelect(w) }, label = { Text(w.label) })
+        }
+    }
+}
+
+@Composable
 private fun SeriesRow(item: SeriesOverview, onClick: () -> Unit, onWatchNext: () -> Unit) {
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            item.series.posterUrl?.let { url ->
+                Poster(url = url, modifier = Modifier.width(44.dp).height(66.dp))
+                Spacer(Modifier.width(12.dp))
+            }
             Column(Modifier.weight(1f)) {
                 Text(
                     item.series.title,
@@ -175,11 +246,13 @@ private fun SeriesRow(item: SeriesOverview, onClick: () -> Unit, onWatchNext: ()
 }
 
 private fun progressText(item: SeriesOverview): String {
-    val base = "${item.watchedEpisodes}/${item.totalEpisodes} Folgen"
-    return if (item.nextSeason != null && item.nextEpisode != null) {
-        "$base · als Nächstes ${Progress.episodeCode(item.nextSeason, item.nextEpisode)}"
-    } else {
-        base
+    val base = if (item.totalEpisodes > 0) "${item.watchedEpisodes}/${item.totalEpisodes} Folgen" else "keine Folgen"
+    return when {
+        item.nextSeason != null && item.nextEpisode != null ->
+            "$base · als Nächstes ${Progress.episodeCode(item.nextSeason, item.nextEpisode)}"
+        item.needsSync && item.excelSeason != null && item.excelEpisode != null ->
+            "$base · zuletzt ${Progress.episodeCode(item.excelSeason, item.excelEpisode)}"
+        else -> base
     }
 }
 

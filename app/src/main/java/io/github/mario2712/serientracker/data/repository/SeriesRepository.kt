@@ -22,12 +22,18 @@ class SeriesRepository(private val db: AppDatabase) {
 
     fun observeOverview(): Flow<List<SeriesOverview>> = seriesDao.observeOverview()
 
+    fun observeUnsyncedCount(): Flow<Int> = seriesDao.observeUnsyncedCount()
+
     fun observeSeries(id: Long): Flow<SeriesWithSeasons?> = seriesDao.observeSeries(id)
 
     suspend fun getSeries(id: Long): SeriesEntity? = seriesDao.getSeries(id)
 
-    suspend fun getEpisodeCounts(seriesId: Long): List<Int> =
-        episodeDao.getSeasons(seriesId).map { episodeDao.maxEpisodeNumber(it.id) }
+    /** Episode count per regular season (index 0 = season 1); specials are not edited in the form. */
+    suspend fun getEpisodeCounts(seriesId: Long): List<Int> {
+        val byNumber = episodeDao.getSeasons(seriesId).filter { it.number > 0 }.associateBy { it.number }
+        val maxSeason = byNumber.keys.maxOrNull() ?: return emptyList()
+        return (1..maxSeason).map { n -> byNumber[n]?.let { episodeDao.maxEpisodeNumber(it.id) } ?: 0 }
+    }
 
     /**
      * Creates or updates a series. [episodesPerSeason] has one entry per season
@@ -41,7 +47,8 @@ class SeriesRepository(private val db: AppDatabase) {
             seriesDao.update(series.copy(updatedAt = now))
             series.id
         }
-        syncSeasons(id, episodesPerSeason)
+        // Matched series get their seasons from TMDB; the form only edits the others.
+        if (series.tmdbId == null) syncSeasons(id, episodesPerSeason)
         // A manually chosen status wins on save; "Fertig" means everything has been seen.
         if (series.status == WatchStatus.COMPLETED) episodeDao.markAllWatched(id, now)
         id
@@ -51,33 +58,31 @@ class SeriesRepository(private val db: AppDatabase) {
 
     suspend fun setEpisodeWatched(seriesId: Long, episodeId: Long, watched: Boolean) = db.withTransaction {
         episodeDao.setWatched(episodeId, if (watched) System.currentTimeMillis() else null)
-        afterProgressChange(seriesId)
+        afterProgressChange(seriesId, if (watched) Progress.Change.WATCHED else Progress.Change.UNWATCHED)
     }
 
     suspend fun setSeasonWatched(seriesId: Long, seasonId: Long, watched: Boolean) = db.withTransaction {
         episodeDao.setSeasonWatched(seasonId, if (watched) System.currentTimeMillis() else null)
-        afterProgressChange(seriesId)
+        afterProgressChange(seriesId, if (watched) Progress.Change.WATCHED else Progress.Change.UNWATCHED)
     }
 
     /** Marks the first unwatched episode as watched. Returns false if there is none. */
     suspend fun watchNextEpisode(seriesId: Long): Boolean = db.withTransaction {
         val next = episodeDao.nextUnwatched(seriesId) ?: return@withTransaction false
         episodeDao.setWatched(next.id, System.currentTimeMillis())
-        afterProgressChange(seriesId)
+        afterProgressChange(seriesId, Progress.Change.WATCHED)
         true
     }
 
-    private suspend fun afterProgressChange(seriesId: Long) {
+    private suspend fun afterProgressChange(seriesId: Long, change: Progress.Change) {
         seriesDao.touch(seriesId)
-        refreshStatus(seriesId)
-    }
-
-    private suspend fun refreshStatus(seriesId: Long) {
         val series = seriesDao.getSeries(seriesId) ?: return
         val newStatus = Progress.autoStatus(
             current = series.status,
             watched = episodeDao.countWatched(seriesId),
             total = episodeDao.countEpisodes(seriesId),
+            change = change,
+            isEnded = series.isEnded,
         )
         if (newStatus != series.status) seriesDao.update(series.copy(status = newStatus))
     }
