@@ -1,0 +1,89 @@
+package io.github.mario2712.serientracker.ui.editseries
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import io.github.mario2712.serientracker.data.local.SeriesEntity
+import io.github.mario2712.serientracker.data.repository.SeriesRepository
+import io.github.mario2712.serientracker.domain.WatchStatus
+import io.github.mario2712.serientracker.ui.navigation.Routes
+import kotlinx.coroutines.launch
+
+data class EditSeriesForm(
+    val title: String = "",
+    val status: WatchStatus = WatchStatus.PLAN_TO_WATCH,
+    val streamingService: String = "",
+    val rating: Int? = null,
+    val notes: String = "",
+    /** Episode count per season as typed, index 0 = season 1. */
+    val seasons: List<String> = listOf(""),
+) {
+    val isValid: Boolean get() = title.isNotBlank()
+}
+
+class EditSeriesViewModel(
+    savedStateHandle: SavedStateHandle,
+    private val repository: SeriesRepository,
+) : ViewModel() {
+
+    private val seriesId: Long = savedStateHandle[Routes.ARG_SERIES_ID] ?: 0L
+    val isNew: Boolean = seriesId == 0L
+
+    private var original: SeriesEntity? = null
+
+    var form by mutableStateOf(EditSeriesForm())
+        private set
+    var isLoading by mutableStateOf(!isNew)
+        private set
+
+    init {
+        if (!isNew) {
+            viewModelScope.launch {
+                val s = repository.getSeries(seriesId)
+                original = s
+                if (s != null) {
+                    val counts = repository.getEpisodeCounts(seriesId)
+                    form = EditSeriesForm(
+                        title = s.title,
+                        status = s.status,
+                        streamingService = s.streamingService.orEmpty(),
+                        rating = s.rating,
+                        notes = s.notes.orEmpty(),
+                        seasons = counts.map { it.toString() }.ifEmpty { listOf("") },
+                    )
+                }
+                isLoading = false
+            }
+        }
+    }
+
+    fun update(transform: (EditSeriesForm) -> EditSeriesForm) { form = transform(form) }
+
+    fun addSeason() = update { it.copy(seasons = it.seasons + "") }
+
+    fun removeLastSeason() = update { it.copy(seasons = it.seasons.dropLast(1)) }
+
+    fun setSeasonEpisodes(index: Int, text: String) = update {
+        val digits = text.filter(Char::isDigit).take(3)
+        it.copy(seasons = it.seasons.toMutableList().also { list -> list[index] = digits })
+    }
+
+    fun save(onSaved: (Long) -> Unit) {
+        val f = form
+        if (!f.isValid) return
+        val base = original ?: SeriesEntity(title = f.title)
+        val entity = base.copy(
+            title = f.title.trim(),
+            status = f.status,
+            streamingService = f.streamingService.trim().ifEmpty { null },
+            rating = f.rating,
+            notes = f.notes.trim().ifEmpty { null },
+        )
+        // Trailing empty season fields are ignored; empty fields in between count as 0 episodes.
+        val counts = f.seasons.map { it.toIntOrNull() ?: 0 }.dropLastWhile { it == 0 }
+        viewModelScope.launch { onSaved(repository.save(entity, counts)) }
+    }
+}
