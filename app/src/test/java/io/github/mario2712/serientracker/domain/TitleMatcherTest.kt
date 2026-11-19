@@ -9,7 +9,8 @@ class TitleMatcherTest {
 
     @Test
     fun `normalize ignores case, punctuation, umlauts and leading articles`() {
-        assertEquals("knight of seven kingdoms", TitleMatcher.normalize("A Knight of the Seven Kingdoms"))
+        // Only a leading article is dropped.
+        assertEquals("knight of the seven kingdoms", TitleMatcher.normalize("A Knight of the Seven Kingdoms"))
         assertEquals("daredevil born again", TitleMatcher.normalize("Daredevil: Born Again"))
         assertEquals("kingdom suedkorea", TitleMatcher.normalize("Kingdom (Südkorea)"))
         assertEquals("7 vs wild", TitleMatcher.normalize("7 vs. Wild"))
