@@ -2,6 +2,7 @@ package io.github.mario2712.serientracker.data.repository
 
 import androidx.room.withTransaction
 import io.github.mario2712.serientracker.data.local.AppDatabase
+import io.github.mario2712.serientracker.data.local.DataStats
 import io.github.mario2712.serientracker.data.local.EpisodeEntity
 import io.github.mario2712.serientracker.data.local.SeasonEntity
 import io.github.mario2712.serientracker.data.local.SeriesEntity
@@ -23,6 +24,8 @@ class SeriesRepository(private val db: AppDatabase) {
     fun observeOverview(): Flow<List<SeriesOverview>> = seriesDao.observeOverview()
 
     fun observeUnsyncedCount(): Flow<Int> = seriesDao.observeUnsyncedCount()
+
+    fun observeStats(): Flow<DataStats> = seriesDao.observeStats()
 
     fun observeSeries(id: Long): Flow<SeriesWithSeasons?> = seriesDao.observeSeries(id)
 
@@ -62,8 +65,18 @@ class SeriesRepository(private val db: AppDatabase) {
     }
 
     suspend fun setSeasonWatched(seriesId: Long, seasonId: Long, watched: Boolean) = db.withTransaction {
-        episodeDao.setSeasonWatched(seasonId, if (watched) System.currentTimeMillis() else null)
+        if (watched) {
+            episodeDao.markSeasonWatched(seasonId, System.currentTimeMillis())
+        } else {
+            episodeDao.clearSeasonWatched(seasonId)
+        }
         afterProgressChange(seriesId, if (watched) Progress.Change.WATCHED else Progress.Change.UNWATCHED)
+    }
+
+    /** Sets a corrected "watched on" date for an episode (from the episode detail sheet). */
+    suspend fun setEpisodeWatchedAt(seriesId: Long, episodeId: Long, watchedAt: Long) = db.withTransaction {
+        episodeDao.setWatched(episodeId, watchedAt)
+        afterProgressChange(seriesId, Progress.Change.WATCHED)
     }
 
     /** Marks the first unwatched episode as watched. Returns false if there is none. */

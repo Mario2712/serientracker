@@ -145,6 +145,23 @@ Mit einzelnen Folgen kann man Lücken abbilden (eine Folge übersprungen), eine 
 - `tags` / `series_tags` für Genres oder eigene Listen.
 - Schema-Änderungen über Room-Migrationen; die Schemata werden in `app/schemas/` exportiert.
 
+## Mengengerüst
+- ~20.000 Folgen in ~1.500 Staffeln bei 361 Serien (Ausreißer: Pokémon 1.368, One Piece 1.169).
+- ~100 Byte pro Folge inklusive Index → **~2–3 MB Datenbank**. Die Liste liest nur SQL-Summen.
+- Archiv-JSON ~2 MB, Excel-Export wenige KB.
+- `episodes.watchedAtImported` kennzeichnet Abhak-Daten, die nur aus dem Excel-Datum „aktualisiert“ stammen.
+
+## Export
+- `data/export/ExcelExport.kt`: App-Stand → Excel-Zeilen nach der Original-Logik (Position, max, gesehen/von,
+  ungesehen, nächste, Sortierung). Nicht abgeglichene Serien geben die Excel-Werte unverändert zurück.
+- `data/export/XlsxWriter.kt`: eigener XLSX-Schreiber (ZIP + XML), keine Bibliothek.
+- `data/export/BackupRepository.kt`: Archiv-JSON (formatVersion 1); das Wiederherstellen läuft in einer Transaktion.
+- CI-Round-Trip: Seed → App → Excel → `tools/convert_excel.py` → `tools/check_roundtrip.py` muss identisch sein.
+
+## Datenbank-Migrationen
+- v1 → v2: destruktiv (nur Grundgerüst).
+- v2 → v3: `episodes.watchedAtImported` (Mitternachts-Zeitstempel = importiert), `import_progress.unseen`.
+
 ## Excel-Startdaten
 `tools/convert_excel.py` wandelt das Blatt „Serien“ in `app/src/main/assets/seed/serien.json` um
 (eine Serie pro Zeile). `SeedImporter` lädt die Datei beim ersten Start. Mapping-Logik:

@@ -30,7 +30,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -69,6 +68,7 @@ fun SeriesDetailScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var confirmDelete by remember { mutableStateOf(false) }
+    var selectedEpisodeId by rememberSaveable { mutableStateOf<Long?>(null) }
     val title = (state as? SeriesDetailUiState.Loaded)?.data?.series?.title.orEmpty()
 
     Scaffold(
@@ -112,9 +112,26 @@ fun SeriesDetailScreen(
                     onWatchNext = viewModel::watchNext,
                     onToggleEpisode = viewModel::toggleEpisode,
                     onToggleSeason = viewModel::toggleSeason,
+                    onEpisodeDetails = { selectedEpisodeId = it },
                 )
             }
         }
+    }
+
+    // Look the episode up in the live data, so the sheet updates after toggling.
+    val selected = selectedEpisodeId?.let { id ->
+        (state as? SeriesDetailUiState.Loaded)?.data?.seasons?.firstNotNullOfOrNull { season ->
+            season.episodes.firstOrNull { it.id == id }?.let { season.season.number to it }
+        }
+    }
+    selected?.let { (seasonNumber, episode) ->
+        EpisodeDetailSheet(
+            seasonNumber = seasonNumber,
+            episode = episode,
+            onDismiss = { selectedEpisodeId = null },
+            onToggle = { viewModel.toggleEpisode(episode.id, it) },
+            onSetWatchedAt = { viewModel.setWatchedAt(episode.id, it) },
+        )
     }
 
     if (confirmDelete) {
@@ -141,6 +158,7 @@ private fun DetailContent(
     onWatchNext: () -> Unit,
     onToggleEpisode: (Long, Boolean) -> Unit,
     onToggleSeason: (Long, Boolean) -> Unit,
+    onEpisodeDetails: (Long) -> Unit,
 ) {
     val all = data.seasons.flatMap { s -> s.episodes.map { s.season.number to it } }
     val watched = all.count { it.second.isWatched }
@@ -181,7 +199,17 @@ private fun DetailContent(
                 initiallyExpanded = season.season.number == next?.first,
                 onToggleEpisode = onToggleEpisode,
                 onToggleSeason = onToggleSeason,
+                onEpisodeDetails = onEpisodeDetails,
             )
+        }
+        if (all.isNotEmpty()) {
+            item {
+                Text(
+                    "Tippen = abhaken · lange drücken = Details",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -268,6 +296,7 @@ private fun SeasonCard(
     initiallyExpanded: Boolean,
     onToggleEpisode: (Long, Boolean) -> Unit,
     onToggleSeason: (Long, Boolean) -> Unit,
+    onEpisodeDetails: (Long) -> Unit,
 ) {
     var expanded by rememberSaveable(season.season.id) { mutableStateOf(initiallyExpanded) }
     val watched = season.episodes.count { it.isWatched }
@@ -303,10 +332,11 @@ private fun SeasonCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 season.episodes.forEach { ep ->
-                    FilterChip(
-                        selected = ep.isWatched,
+                    EpisodeChip(
+                        number = ep.number,
+                        watched = ep.isWatched,
                         onClick = { onToggleEpisode(ep.id, !ep.isWatched) },
-                        label = { Text(ep.number.toString()) },
+                        onLongClick = { onEpisodeDetails(ep.id) },
                     )
                 }
             }

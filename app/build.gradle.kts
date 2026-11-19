@@ -18,7 +18,7 @@ android {
         targetSdk = 35
         // CI sets the build number so every APK can be installed over the previous one.
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
-        versionName = "0.1.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
+        versionName = "0.2.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
     }
 
     signingConfigs {
@@ -52,6 +52,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     testOptions {

@@ -44,6 +44,22 @@ interface SeriesDao {
     @Query("SELECT * FROM series WHERE id = :id")
     fun observeSeries(id: Long): Flow<SeriesWithSeasons?>
 
+    /** Everything, for the Excel export and the archive. */
+    @Transaction
+    @Query("SELECT * FROM series ORDER BY title COLLATE NOCASE")
+    suspend fun getAllWithSeasons(): List<SeriesWithSeasons>
+
+    @Query(
+        """
+        SELECT
+            (SELECT COUNT(*) FROM series) AS series,
+            (SELECT COUNT(*) FROM series WHERE tmdbId IS NOT NULL) AS synced,
+            (SELECT COUNT(*) FROM episodes) AS episodes,
+            (SELECT COUNT(*) FROM episodes WHERE watchedAt IS NOT NULL) AS watched
+        """,
+    )
+    fun observeStats(): Flow<DataStats>
+
     @Query("SELECT * FROM series WHERE id = :id")
     suspend fun getSeries(id: Long): SeriesEntity?
 

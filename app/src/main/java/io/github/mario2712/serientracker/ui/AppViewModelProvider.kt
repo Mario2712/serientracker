@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.github.mario2712.serientracker.AppContainer
 import io.github.mario2712.serientracker.SerienTrackerApp
+import io.github.mario2712.serientracker.ui.about.AboutViewModel
 import io.github.mario2712.serientracker.ui.editseries.EditSeriesViewModel
 import io.github.mario2712.serientracker.ui.seriesdetail.SeriesDetailViewModel
 import io.github.mario2712.serientracker.ui.serieslist.SeriesListViewModel
@@ -34,8 +35,17 @@ object AppViewModelProvider {
             )
         }
         initializer {
-            SettingsViewModel(c().settings, c().tmdbClient, c().tmdbSyncRepository, c().seedImporter)
+            SettingsViewModel(
+                settings = c().settings,
+                tmdbClient = c().tmdbClient,
+                syncRepository = c().tmdbSyncRepository,
+                seedImporter = c().seedImporter,
+                exportRepository = c().exportRepository,
+                backupRepository = c().backupRepository,
+                contentResolver = c().contentResolver,
+            )
         }
+        initializer { AboutViewModel(c().appVersion, c().seriesRepository) }
     }
 }
 

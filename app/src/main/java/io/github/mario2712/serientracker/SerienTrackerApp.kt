@@ -1,7 +1,10 @@
 package io.github.mario2712.serientracker
 
 import android.app.Application
+import android.content.ContentResolver
 import android.util.Log
+import io.github.mario2712.serientracker.data.export.BackupRepository
+import io.github.mario2712.serientracker.data.export.ExportRepository
 import io.github.mario2712.serientracker.data.local.AppDatabase
 import io.github.mario2712.serientracker.data.remote.TmdbClient
 import io.github.mario2712.serientracker.data.repository.SeriesRepository
@@ -36,7 +39,12 @@ class AppContainer(app: Application) {
     /** For work that must outlive a screen (seed import, TMDB sync). */
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    val appVersion: String = "${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
+    val contentResolver: ContentResolver = app.contentResolver
+
     private val database: AppDatabase by lazy { AppDatabase.build(app) }
+    val exportRepository: ExportRepository by lazy { ExportRepository(database, appVersion) }
+    val backupRepository: BackupRepository by lazy { BackupRepository(database, appVersion) }
     val settings: SettingsRepository by lazy { SettingsRepository(app) }
     val seriesRepository: SeriesRepository by lazy { SeriesRepository(database) }
     val tmdbClient: TmdbClient by lazy { TmdbClient { settings.currentTmdbApiKey() } }

@@ -1,5 +1,6 @@
 package io.github.mario2712.serientracker.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
@@ -76,6 +77,8 @@ data class EpisodeEntity(
     val airDate: Long? = null,
     /** When the episode was marked as watched; null = not watched. */
     val watchedAt: Long? = null,
+    /** watchedAt is only the Excel "aktualisiert" date, not the real moment. */
+    @ColumnInfo(defaultValue = "0") val watchedAtImported: Boolean = false,
 )
 
 val EpisodeEntity.isWatched: Boolean get() = watchedAt != null
@@ -107,6 +110,8 @@ data class ImportProgressEntity(
     val total: Int?,
     /** Excel "aktualisiert" as epoch ms, used as watchedAt for imported episodes. */
     val updatedAt: Long?,
+    /** Excel "ungesehen" (x), kept for a lossless Excel export. */
+    val unseen: Boolean? = null,
 )
 
 data class SeasonWithEpisodes(
@@ -122,6 +127,9 @@ data class SeriesWithSeasons(
     @Relation(parentColumn = "id", entityColumn = "seriesId")
     val importProgress: ImportProgressEntity?,
 )
+
+/** Totals for the "Über" screen. */
+data class DataStats(val series: Int, val synced: Int, val episodes: Int, val watched: Int)
 
 /**
  * One row of the series list, with progress computed in SQL.

@@ -64,6 +64,7 @@ fun SeriesListScreen(
     onAddClick: () -> Unit,
     onSyncClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    onAboutClick: () -> Unit,
     viewModel: SeriesListViewModel = viewModel(factory = AppViewModelProvider.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -86,6 +87,10 @@ fun SeriesListScreen(
                         DropdownMenuItem(
                             text = { Text("Einstellungen") },
                             onClick = { menuOpen = false; onSettingsClick() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Über") },
+                            onClick = { menuOpen = false; onAboutClick() },
                         )
                     }
                 },

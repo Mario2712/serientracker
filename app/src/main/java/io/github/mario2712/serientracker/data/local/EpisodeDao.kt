@@ -35,19 +35,32 @@ interface EpisodeDao {
     @Query("DELETE FROM episodes WHERE seasonId = :seasonId AND number > :maxNumber")
     suspend fun deleteEpisodesAbove(seasonId: Long, maxNumber: Int)
 
-    @Query("UPDATE episodes SET watchedAt = :watchedAt WHERE id = :episodeId")
+    /** Ticking by hand: the timestamp is exact, so the imported flag is cleared. */
+    @Query("UPDATE episodes SET watchedAt = :watchedAt, watchedAtImported = 0 WHERE id = :episodeId")
     suspend fun setWatched(episodeId: Long, watchedAt: Long?)
 
-    @Query("UPDATE episodes SET watchedAt = :watchedAt WHERE seasonId = :seasonId")
-    suspend fun setSeasonWatched(seasonId: Long, watchedAt: Long?)
+    /** Ticks the unwatched episodes of a season; already watched ones keep their date. */
+    @Query(
+        """
+        UPDATE episodes SET watchedAt = :watchedAt, watchedAtImported = 0
+        WHERE seasonId = :seasonId AND watchedAt IS NULL
+        """,
+    )
+    suspend fun markSeasonWatched(seasonId: Long, watchedAt: Long)
+
+    @Query("UPDATE episodes SET watchedAt = NULL, watchedAtImported = 0 WHERE seasonId = :seasonId")
+    suspend fun clearSeasonWatched(seasonId: Long)
 
     @Query(
         """
-        UPDATE episodes SET watchedAt = :watchedAt
+        UPDATE episodes SET watchedAt = :watchedAt, watchedAtImported = 0
         WHERE watchedAt IS NULL AND seasonId IN (SELECT id FROM seasons WHERE seriesId = :seriesId)
         """,
     )
     suspend fun markAllWatched(seriesId: Long, watchedAt: Long)
+
+    @Insert
+    suspend fun insertEpisodesStrict(episodes: List<EpisodeEntity>)
 
     @Query(
         """

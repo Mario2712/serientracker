@@ -1,6 +1,12 @@
 package io.github.mario2712.serientracker.ui.settings
 
+import android.content.ContentResolver
+import android.net.Uri
 import androidx.compose.runtime.getValue
+import io.github.mario2712.serientracker.data.export.BackupRepository
+import io.github.mario2712.serientracker.data.export.ExportRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
@@ -18,6 +24,9 @@ class SettingsViewModel(
     private val tmdbClient: TmdbClient,
     private val syncRepository: TmdbSyncRepository,
     private val seedImporter: SeedImporter,
+    private val exportRepository: ExportRepository,
+    private val backupRepository: BackupRepository,
+    private val contentResolver: ContentResolver,
 ) : ViewModel() {
 
     var apiKey by mutableStateOf("")
@@ -53,6 +62,36 @@ class SettingsViewModel(
     fun resetToExcel() = runBusy {
         seedImporter.resetToSeed()
         message = "Excel-Stand wiederhergestellt. Jetzt erneut mit TMDB abgleichen."
+    }
+
+    fun excelFileName(): String = ExportRepository.excelFileName()
+    fun backupFileName(): String = BackupRepository.fileName()
+
+    fun exportExcel(uri: Uri) = runBusy {
+        message = "Excel wird erstellt …"
+        withContext(Dispatchers.IO) {
+            val out = checkNotNull(contentResolver.openOutputStream(uri)) { "Datei kann nicht geschrieben werden" }
+            out.use { exportRepository.exportExcel(it) }
+        }
+        message = "Excel exportiert ✓"
+    }
+
+    fun exportBackup(uri: Uri) = runBusy {
+        message = "Archiv wird erstellt …"
+        withContext(Dispatchers.IO) {
+            val out = checkNotNull(contentResolver.openOutputStream(uri)) { "Datei kann nicht geschrieben werden" }
+            out.use { backupRepository.export(it) }
+        }
+        message = "Archiv exportiert ✓"
+    }
+
+    fun restoreBackup(uri: Uri) = runBusy {
+        message = "Archiv wird eingespielt …"
+        val count = withContext(Dispatchers.IO) {
+            val input = checkNotNull(contentResolver.openInputStream(uri)) { "Datei kann nicht gelesen werden" }
+            input.use { backupRepository.restore(it) }
+        }
+        message = "$count Serien aus dem Archiv wiederhergestellt ✓"
     }
 
     private fun runBusy(block: suspend () -> Unit) {

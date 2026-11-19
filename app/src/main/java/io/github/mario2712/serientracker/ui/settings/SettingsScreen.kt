@@ -31,6 +31,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import io.github.mario2712.serientracker.data.export.BackupRepository
+import io.github.mario2712.serientracker.data.export.ExportRepository
 import io.github.mario2712.serientracker.data.remote.Tmdb
 import io.github.mario2712.serientracker.ui.AppViewModelProvider
 
@@ -42,6 +47,17 @@ fun SettingsScreen(
 ) {
     val uriHandler = LocalUriHandler.current
     var confirmReset by remember { mutableStateOf(false) }
+    var restoreUri by remember { mutableStateOf<Uri?>(null) }
+
+    val excelLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(ExportRepository.MIME_XLSX),
+    ) { uri -> uri?.let(viewModel::exportExcel) }
+    val backupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(BackupRepository.MIME_JSON),
+    ) { uri -> uri?.let(viewModel::exportBackup) }
+    val restoreLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri -> restoreUri = uri }
 
     Scaffold(
         topBar = {
@@ -83,11 +99,43 @@ fun SettingsScreen(
             }
 
             HorizontalDivider()
+            Text("Export & Archiv", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Die Excel hat das Format deiner ursprünglichen Serienliste. Das Archiv enthält den " +
+                    "kompletten Stand mit allen Folgen und Abhak-Zeitpunkten und lässt sich wieder einspielen.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Button(onClick = { excelLauncher.launch(viewModel.excelFileName()) }, enabled = !viewModel.busy) {
+                Text("Excel exportieren")
+            }
+            OutlinedButton(onClick = { backupLauncher.launch(viewModel.backupFileName()) }, enabled = !viewModel.busy) {
+                Text("Archiv exportieren")
+            }
+            OutlinedButton(
+                onClick = { restoreLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain")) },
+                enabled = !viewModel.busy,
+            ) {
+                Text("Aus Archiv wiederherstellen")
+            }
+
+            HorizontalDivider()
             Text("Daten", style = MaterialTheme.typography.titleMedium)
             OutlinedButton(onClick = { confirmReset = true }, enabled = !viewModel.busy) {
                 Text("Auf Excel-Stand zurücksetzen")
             }
         }
+    }
+
+    restoreUri?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { restoreUri = null },
+            title = { Text("Archiv wiederherstellen?") },
+            text = { Text("Der aktuelle Stand in der App wird vollständig durch das Archiv ersetzt.") },
+            confirmButton = {
+                TextButton(onClick = { restoreUri = null; viewModel.restoreBackup(uri) }) { Text("Wiederherstellen") }
+            },
+            dismissButton = { TextButton(onClick = { restoreUri = null }) { Text("Abbrechen") } },
+        )
     }
 
     if (confirmReset) {

@@ -15,7 +15,10 @@
 - ✅ **Excel-Liste als Startdaten** (361 Serien, Status-Mapping, Wer, Genre)
 - ✅ Status „Aufgeholt“ (alles gesehen, wartet auf neue Folgen)
 - ✅ Filter „Wer“: Meine / Johannas / Gemeinsam
-- 🔜 Export/Backup als JSON oder CSV (Datei teilen / in Drive speichern)
+- ✅ **Excel-Export** `serienliste_yyyymmdd.xlsx` mit Original-Logik + Blatt „Info“
+- ✅ **Archiv** (JSON) exportieren und wiederherstellen
+- ✅ Folgendetails per langem Drücken: Titel, Erstausstrahlung, abgehakt am (änderbar)
+- ✅ „Über“-Screen: Version, Entwickler, Datenstand
 - 🔜 Rückgängig-Snackbar nach dem Abhaken oder Löschen
 
 ## Komfort

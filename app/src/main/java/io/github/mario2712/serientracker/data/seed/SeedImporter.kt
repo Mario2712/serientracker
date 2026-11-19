@@ -75,6 +75,8 @@ class SeedImporter(
                 watched = row.watched,
                 total = row.total,
                 updatedAt = updatedMs,
+                // false instead of null, so null only means "unknown" (rows from DB version 2).
+                unseen = row.unseen ?: false,
             ),
         )
     }

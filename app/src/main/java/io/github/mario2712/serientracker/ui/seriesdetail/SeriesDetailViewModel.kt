@@ -65,6 +65,10 @@ class SeriesDetailViewModel(
         .map { if (it == null) SeriesDetailUiState.NotFound else SeriesDetailUiState.Loaded(sorted(it)) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SeriesDetailUiState.Loading)
 
+    fun setWatchedAt(episodeId: Long, watchedAt: Long) {
+        viewModelScope.launch { repository.setEpisodeWatchedAt(seriesId, episodeId, watchedAt) }
+    }
+
     fun toggleEpisode(episodeId: Long, watched: Boolean) {
         viewModelScope.launch { repository.setEpisodeWatched(seriesId, episodeId, watched) }
     }

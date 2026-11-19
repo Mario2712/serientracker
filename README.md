@@ -27,6 +27,16 @@ Alternativ: Unter **Actions → letzter Lauf → Artifacts** liegt die APK als Z
 4. **Menü → TMDB-Abgleich → Abgleich starten.** Eindeutige Treffer werden automatisch übernommen
    und bis zu deinem Excel-Stand abgehakt. Den Rest unter „Bitte prüfen“ ordnest du selbst zu.
 
+## Export & Archiv
+
+In der App unter **⋮ → Einstellungen → Export & Archiv**:
+- **Excel exportieren:** schreibt `serienliste_yyyymmdd.xlsx` im Format der ursprünglichen Serienliste
+  (gleiche Spalten und Logik, Anteil als Formel, orange Markierung in „nächste“) plus ein Blatt „Info“
+  mit App-Version und Entwickler. CI prüft bei jedem Build, dass der Export der Original-Excel
+  feldgenau entspricht (Round-Trip).
+- **Archiv exportieren:** `serientracker_backup_yyyymmdd.json` mit allen Serien, Folgen und Abhak-Zeitpunkten.
+- **Aus Archiv wiederherstellen:** ersetzt den aktuellen Stand durch ein Archiv (z. B. am neuen Handy).
+
 ### Excel aktualisieren
 
 ```bash

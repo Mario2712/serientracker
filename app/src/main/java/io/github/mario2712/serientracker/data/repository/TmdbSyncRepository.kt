@@ -124,6 +124,7 @@ class TmdbSyncRepository(
                     title = ep.title,
                     airDate = ep.airDate.toEpochDay(),
                     watchedAt = if (watched) watchedAt else null,
+                    watchedAtImported = watched,
                 )
             }
             episodeDao.insertEpisodes(newEpisodes)
