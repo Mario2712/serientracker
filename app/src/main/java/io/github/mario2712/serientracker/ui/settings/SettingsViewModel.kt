@@ -41,6 +41,13 @@ class SettingsViewModel(
     val background: StateFlow<BackgroundSettings> = settings.background
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BackgroundSettings())
 
+    val showExcel: StateFlow<Boolean> = settings.showExcelComparisons
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    fun setShowExcel(show: Boolean) {
+        viewModelScope.launch { settings.setShowExcelComparisons(show) }
+    }
+
     fun setNotifications(enabled: Boolean) {
         viewModelScope.launch {
             settings.setNotificationsEnabled(enabled)

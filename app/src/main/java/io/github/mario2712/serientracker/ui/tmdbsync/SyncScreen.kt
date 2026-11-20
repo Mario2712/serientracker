@@ -47,6 +47,7 @@ fun SyncScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val unsynced by viewModel.unsyncedCount.collectAsStateWithLifecycle()
+    val showExcel by viewModel.showExcel.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -112,7 +113,7 @@ fun SyncScreen(
             }
 
             val diffs = state.differences
-            if (diffs.isNotEmpty()) {
+            if (showExcel && diffs.isNotEmpty()) {
                 item { SectionTitle("Abweichungen zur Excel (${diffs.size})") }
                 items(diffs, key = { "d${it.seriesId}" }) { r ->
                     ListRow(

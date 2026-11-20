@@ -35,6 +35,12 @@ class SettingsRepository(private val context: Context) {
     private val lastBackupError = stringPreferencesKey("last_backup_error")
     private val listSort = stringPreferencesKey("list_sort")
     private val listGenre = stringPreferencesKey("list_genre")
+    private val showExcel = booleanPreferencesKey("show_excel_comparisons")
+
+    /** Show Excel differences and Excel details (off once the app is the only source). */
+    val showExcelComparisons: Flow<Boolean> = context.dataStore.data.map { it[showExcel] ?: true }
+
+    suspend fun setShowExcelComparisons(show: Boolean) = set(showExcel, show)
 
     val tmdbApiKey: Flow<String?> = context.dataStore.data.map { it[tmdbKey] }
 
