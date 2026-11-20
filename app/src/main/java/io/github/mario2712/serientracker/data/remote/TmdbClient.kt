@@ -97,7 +97,14 @@ class TmdbClient(private val apiKey: suspend () -> String?) : TmdbDataSource {
                             name = s.name,
                             episodes = s.episodes
                                 .filter { aired(it.airDate) }
-                                .map { TmdbEpisode(it.episodeNumber, it.name?.takeIf(String::isNotBlank), it.airDate) },
+                                .map {
+                                    TmdbEpisode(
+                                        number = it.episodeNumber,
+                                        title = it.name?.takeIf(String::isNotBlank),
+                                        airDate = it.airDate,
+                                        runtime = it.runtime?.takeIf { min -> min > 0 },
+                                    )
+                                },
                         )
                     }
                     .filter { it.episodes.isNotEmpty() },

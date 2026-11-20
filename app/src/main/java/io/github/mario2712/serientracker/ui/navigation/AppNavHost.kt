@@ -11,6 +11,7 @@ import io.github.mario2712.serientracker.ui.editseries.EditSeriesScreen
 import io.github.mario2712.serientracker.ui.seriesdetail.SeriesDetailScreen
 import io.github.mario2712.serientracker.ui.serieslist.SeriesListScreen
 import io.github.mario2712.serientracker.ui.settings.SettingsScreen
+import io.github.mario2712.serientracker.ui.stats.StatsScreen
 import io.github.mario2712.serientracker.ui.tmdbsync.MatchSeriesScreen
 import io.github.mario2712.serientracker.ui.tmdbsync.SyncScreen
 
@@ -23,6 +24,7 @@ object Routes {
     const val MATCH = "sync/match/{$ARG_SERIES_ID}"
     const val SETTINGS = "settings"
     const val ABOUT = "about"
+    const val STATS = "stats"
 
     fun detail(id: Long) = "series/detail/$id"
     fun match(id: Long) = "sync/match/$id"
@@ -40,6 +42,7 @@ fun AppNavHost() {
                 onSyncClick = { nav.navigate(Routes.SYNC) },
                 onSettingsClick = { nav.navigate(Routes.SETTINGS) },
                 onAboutClick = { nav.navigate(Routes.ABOUT) },
+                onStatsClick = { nav.navigate(Routes.STATS) },
             )
         }
         composable(
@@ -71,6 +74,12 @@ fun AppNavHost() {
         }
         composable(Routes.ABOUT) {
             AboutScreen(onBack = { nav.popBackStack() })
+        }
+        composable(Routes.STATS) {
+            StatsScreen(
+                onBack = { nav.popBackStack() },
+                onOpenSeries = { nav.navigate(Routes.detail(it)) },
+            )
         }
         composable(
             route = Routes.EDIT,

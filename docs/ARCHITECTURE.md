@@ -161,6 +161,20 @@ Mit einzelnen Folgen kann man Lücken abbilden (eine Folge übersprungen), eine 
 ## Datenbank-Migrationen
 - v1 → v2: destruktiv (nur Grundgerüst).
 - v2 → v3: `episodes.watchedAtImported` (Mitternachts-Zeitstempel = importiert), `import_progress.unseen`.
+- v3 → v4: `series.originalTitle`.
+- v4 → v5: `episodes.rating`, `episodes.kind` (REGULAR/SPECIAL/HIDDEN; Staffel 0 → SPECIAL), `episodes.isCustom`,
+  `episodes.runtime`, `series.tmdbMetaVersion`, `series.excelWatched/excelTotal`.
+  Für schon abgeglichene Serien trägt `SeedImporter.backfillExcelCounts()` die Excel-Werte per Titel aus `serien.json` nach.
+
+## Folgen-Typen & Specials
+- `HIDDEN` zählt nirgends (Fortschritt, Status, Excel, Statistik). „Nächste Folge“ nimmt nur `REGULAR`.
+- Erster Abgleich: von den TMDB-Specials zählen die ersten `maxSpecial` aus der Excel, der Rest ist `HIDDEN`.
+- Eigene Specials: Staffel 0, `isCustom = 1`, Nummer ab 1000; werden beim Aktualisieren nie verändert.
+- Excel-Export: „Special“ = laufende Nummer der gesehenen Specials nach Erstausstrahlung.
+
+## Statistik
+`data/stats/StatsCalculator.compute()` ist eine reine Funktion über alle Serien (unit-getestet). Sehzeit nutzt
+die TMDB-Laufzeit je Folge, fehlende Werte den Median der Serie. Der Verlauf nutzt nur echte Abhak-Zeitpunkte.
 
 ## Excel-Startdaten
 `tools/convert_excel.py` wandelt das Blatt „Serien“ in `app/src/main/assets/seed/serien.json` um

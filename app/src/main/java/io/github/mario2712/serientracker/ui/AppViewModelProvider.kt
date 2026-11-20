@@ -12,6 +12,7 @@ import io.github.mario2712.serientracker.ui.editseries.EditSeriesViewModel
 import io.github.mario2712.serientracker.ui.seriesdetail.SeriesDetailViewModel
 import io.github.mario2712.serientracker.ui.serieslist.SeriesListViewModel
 import io.github.mario2712.serientracker.ui.settings.SettingsViewModel
+import io.github.mario2712.serientracker.ui.stats.StatsViewModel
 import io.github.mario2712.serientracker.ui.tmdbsync.MatchSeriesViewModel
 import io.github.mario2712.serientracker.ui.tmdbsync.SyncViewModel
 
@@ -46,6 +47,7 @@ object AppViewModelProvider {
             )
         }
         initializer { AboutViewModel(c().appVersion, c().seriesRepository) }
+        initializer { StatsViewModel(c().statsRepository) }
     }
 }
 

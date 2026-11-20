@@ -6,6 +6,8 @@ data class ExcelRow(
     val status: Int? = null,
     val finished: Int? = null,
     val title: String,
+    /** Only in the app's export (column "Originaltitel"); the original list has no such column. */
+    val originalTitle: String? = null,
     val who: String? = null,
     val season: Int? = null,
     val episode: Int? = null,

@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import io.github.mario2712.serientracker.domain.EpisodeKind
 
 @Dao
 interface EpisodeDao {
@@ -20,14 +21,32 @@ interface EpisodeDao {
     @Query("SELECT * FROM episodes WHERE seasonId = :seasonId ORDER BY number")
     suspend fun getEpisodes(seasonId: Long): List<EpisodeEntity>
 
-    @Query("UPDATE episodes SET title = :title, airDate = :airDate WHERE id = :episodeId")
-    suspend fun setEpisodeInfo(episodeId: Long, title: String?, airDate: Long?)
+    @Query("SELECT * FROM episodes WHERE id = :episodeId")
+    suspend fun getEpisode(episodeId: Long): EpisodeEntity?
+
+    /** TMDB info for an episode from TMDB; custom specials are never touched. */
+    @Query(
+        """
+        UPDATE episodes SET title = :title, airDate = :airDate, runtime = COALESCE(:runtime, runtime)
+        WHERE id = :episodeId AND isCustom = 0
+        """,
+    )
+    suspend fun setEpisodeInfo(episodeId: Long, title: String?, airDate: Long?, runtime: Int?)
 
     @Query("DELETE FROM seasons WHERE seriesId = :seriesId AND number > :maxNumber")
     suspend fun deleteSeasonsAbove(seriesId: Long, maxNumber: Int)
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertEpisodes(episodes: List<EpisodeEntity>)
+
+    @Insert
+    suspend fun insertEpisodesStrict(episodes: List<EpisodeEntity>)
+
+    @Insert
+    suspend fun insertEpisode(episode: EpisodeEntity): Long
+
+    @Query("DELETE FROM episodes WHERE id = :episodeId AND isCustom = 1")
+    suspend fun deleteCustomEpisode(episodeId: Long)
 
     @Query("SELECT COALESCE(MAX(number), 0) FROM episodes WHERE seasonId = :seasonId")
     suspend fun maxEpisodeNumber(seasonId: Long): Int
@@ -39,11 +58,17 @@ interface EpisodeDao {
     @Query("UPDATE episodes SET watchedAt = :watchedAt, watchedAtImported = 0 WHERE id = :episodeId")
     suspend fun setWatched(episodeId: Long, watchedAt: Long?)
 
-    /** Ticks the unwatched episodes of a season; already watched ones keep their date. */
+    @Query("UPDATE episodes SET rating = :rating WHERE id = :episodeId")
+    suspend fun setRating(episodeId: Long, rating: Int?)
+
+    @Query("UPDATE episodes SET kind = :kind WHERE id = :episodeId")
+    suspend fun setKind(episodeId: Long, kind: EpisodeKind)
+
+    /** Ticks the unwatched, counting episodes of a season; already watched ones keep their date. */
     @Query(
         """
         UPDATE episodes SET watchedAt = :watchedAt, watchedAtImported = 0
-        WHERE seasonId = :seasonId AND watchedAt IS NULL
+        WHERE seasonId = :seasonId AND watchedAt IS NULL AND kind != 'HIDDEN'
         """,
     )
     suspend fun markSeasonWatched(seasonId: Long, watchedAt: Long)
@@ -54,18 +79,16 @@ interface EpisodeDao {
     @Query(
         """
         UPDATE episodes SET watchedAt = :watchedAt, watchedAtImported = 0
-        WHERE watchedAt IS NULL AND seasonId IN (SELECT id FROM seasons WHERE seriesId = :seriesId)
+        WHERE watchedAt IS NULL AND kind != 'HIDDEN'
+            AND seasonId IN (SELECT id FROM seasons WHERE seriesId = :seriesId)
         """,
     )
     suspend fun markAllWatched(seriesId: Long, watchedAt: Long)
 
-    @Insert
-    suspend fun insertEpisodesStrict(episodes: List<EpisodeEntity>)
-
     @Query(
         """
         SELECT e.* FROM episodes e JOIN seasons se ON e.seasonId = se.id
-        WHERE se.seriesId = :seriesId AND se.number > 0 AND e.watchedAt IS NULL
+        WHERE se.seriesId = :seriesId AND e.kind = 'REGULAR' AND e.watchedAt IS NULL
         ORDER BY se.number, e.number LIMIT 1
         """,
     )
@@ -74,7 +97,7 @@ interface EpisodeDao {
     @Query(
         """
         SELECT COUNT(*) FROM episodes e JOIN seasons se ON e.seasonId = se.id
-        WHERE se.seriesId = :seriesId
+        WHERE se.seriesId = :seriesId AND e.kind != 'HIDDEN'
         """,
     )
     suspend fun countEpisodes(seriesId: Long): Int
@@ -82,7 +105,7 @@ interface EpisodeDao {
     @Query(
         """
         SELECT COUNT(*) FROM episodes e JOIN seasons se ON e.seasonId = se.id
-        WHERE se.seriesId = :seriesId AND e.watchedAt IS NOT NULL
+        WHERE se.seriesId = :seriesId AND e.kind != 'HIDDEN' AND e.watchedAt IS NOT NULL
         """,
     )
     suspend fun countWatched(seriesId: Long): Int

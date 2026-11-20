@@ -7,6 +7,7 @@ import io.github.mario2712.serientracker.data.local.SeasonEntity
 import io.github.mario2712.serientracker.data.local.SeasonWithEpisodes
 import io.github.mario2712.serientracker.data.local.SeriesEntity
 import io.github.mario2712.serientracker.data.local.SeriesWithSeasons
+import io.github.mario2712.serientracker.domain.EpisodeKind
 import io.github.mario2712.serientracker.domain.ExcelRow
 import io.github.mario2712.serientracker.domain.WatchStatus
 import io.github.mario2712.serientracker.domain.Watcher
@@ -38,6 +39,7 @@ class ExcelExportTest {
                         EpisodeEntity(
                             seasonId = i + 1L, number = n, airDate = date++,
                             watchedAt = if (n <= watched) 1L else null,
+                            kind = if (number == 0) EpisodeKind.SPECIAL else EpisodeKind.REGULAR,
                         )
                     },
                 )
@@ -78,6 +80,51 @@ class ExcelExportTest {
         assertEquals("2020-01-17", row.lastAired)
         // Running show without known next date: latest available episode.
         assertEquals(LocalDate.parse("2020-01-01").plusDays(27).toString(), row.nextAired)
+    }
+
+    @Test
+    fun `hidden episodes do not count and custom specials do`() {
+        // Altered Carbon: S1 10, S2 8, TMDB specials: 1 counted + 1 hidden, plus own special "Resleeved".
+        val base = series(WatchStatus.COMPLETED, listOf(Triple(0, 2, 1), Triple(1, 10, 10), Triple(2, 8, 8)))
+        val specials = base.seasons[0]
+        val withKinds = base.copy(
+            seasons = listOf(
+                specials.copy(
+                    episodes = listOf(
+                        specials.episodes[0],
+                        specials.episodes[1].copy(kind = EpisodeKind.HIDDEN),
+                        EpisodeEntity(seasonId = 1, number = 1000, title = "Resleeved", airDate = day("2020-03-19"), watchedAt = 1L, kind = EpisodeKind.SPECIAL, isCustom = true),
+                    ),
+                ),
+            ) + base.seasons.drop(1),
+        )
+        val row = ExcelExport.toRow(withKinds)
+        assertEquals(20, row.total)
+        assertEquals(20, row.watched)
+        assertEquals(2, row.maxSpecial)
+        assertEquals(2, row.special) // the custom one aired last → special no. 2
+        assertEquals("2020-03-19", row.lastAired)
+        assertNull(row.unseen)
+    }
+
+    @Test
+    fun `episode marked as special leaves the regular position`() {
+        val base = series(WatchStatus.CAUGHT_UP, listOf(Triple(1, 10, 10)))
+        val season = base.seasons[0]
+        val last = season.episodes.last().copy(kind = EpisodeKind.SPECIAL)
+        val row = ExcelExport.toRow(base.copy(seasons = listOf(season.copy(episodes = season.episodes.dropLast(1) + last))))
+        assertEquals(1, row.season)
+        assertEquals(9, row.episode)
+        assertEquals(9, row.maxEpisode)
+        assertEquals(1, row.special)
+        assertEquals(1, row.maxSpecial)
+        assertEquals(10, row.total)
+    }
+
+    @Test
+    fun `original title is exported`() {
+        val data = series(WatchStatus.PAUSED, emptyList()).let { it.copy(series = it.series.copy(originalTitle = "The Queen's Gambit")) }
+        assertEquals("The Queen's Gambit", ExcelExport.toRow(data).originalTitle)
     }
 
     @Test

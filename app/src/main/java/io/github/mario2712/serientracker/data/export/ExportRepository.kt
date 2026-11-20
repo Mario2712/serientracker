@@ -2,6 +2,7 @@ package io.github.mario2712.serientracker.data.export
 
 import io.github.mario2712.serientracker.data.local.AppDatabase
 import io.github.mario2712.serientracker.data.local.SeriesWithSeasons
+import io.github.mario2712.serientracker.data.local.counts
 import io.github.mario2712.serientracker.data.export.XlsxWriter.Cell
 import io.github.mario2712.serientracker.data.export.XlsxWriter.Style
 import io.github.mario2712.serientracker.domain.ExcelRow
@@ -29,7 +30,8 @@ class ExportRepository(
             rows = listOf(header) + body,
             freezeHeader = true,
             conditionalFormats = listOf(
-                XlsxWriter.ConditionalFormat("J1:J1048576", listOf("IF(J1<>\"\",J1<=TODAY(),0)", "I1=\"x\"")),
+                // "nächste" (K) turns orange when the date has passed or there are unseen episodes (J).
+                XlsxWriter.ConditionalFormat("K1:K1048576", listOf("IF(K1<>\"\",K1<=TODAY(),0)", "J1=\"x\"")),
             ),
         )
     }
@@ -39,6 +41,7 @@ class ExportRepository(
         num(r.finished),
         // Pure numbers (e.g. "24", "1899") are numbers in the original sheet too.
         if (r.title.matches(Regex("[1-9][0-9]{0,8}"))) Cell.Num(r.title.toDouble(), Style.LEFT) else Cell.Text(r.title, Style.LEFT),
+        r.originalTitle?.let { Cell.Text(it, Style.LEFT) } ?: Cell.Empty,
         r.who?.let { Cell.Text(it, Style.CENTER) } ?: Cell.Empty,
         num(r.season),
         num(r.episode),
@@ -54,7 +57,7 @@ class ExportRepository(
         num(r.watched),
         num(r.total),
         if (r.watched != null && r.total != null && r.total > 0) {
-            Cell.Formula("P$rowNumber/Q$rowNumber", r.watched.toDouble() / r.total, Style.PERCENT)
+            Cell.Formula("Q$rowNumber/R$rowNumber", r.watched.toDouble() / r.total, Style.PERCENT)
         } else {
             Cell.Empty
         },
@@ -62,7 +65,7 @@ class ExportRepository(
 
     fun infoSheet(all: List<SeriesWithSeasons>, today: LocalDate): XlsxWriter.Sheet {
         fun row(key: String, value: Cell) = listOf(Cell.Text(key, Style.BOLD), value)
-        val episodes = all.sumOf { s -> s.seasons.sumOf { it.episodes.size } }
+        val episodes = all.sumOf { s -> s.seasons.sumOf { season -> season.episodes.count { it.counts } } }
         return XlsxWriter.Sheet(
             name = "Info",
             columnWidths = listOf(28.0, 40.0),
@@ -88,15 +91,16 @@ class ExportRepository(
         const val DEVELOPER = "DI Mario Siller"
         const val MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
+        /** Original columns plus "Originaltitel" right after "Serie". */
         val HEADERS = listOf(
-            "Status", "fertig", "Serie", "Wer", "Staffel", "Episode", "Special", "Letzte Ausstrahlung",
-            "ungesehen", "nächste", "maxStaffel", "maxEpisode", "maxSpecial", "Genre", "aktualisiert",
-            "gesehen", "von", "Anteil",
+            "Status", "fertig", "Serie", "Originaltitel", "Wer", "Staffel", "Episode", "Special",
+            "Letzte Ausstrahlung", "ungesehen", "nächste", "maxStaffel", "maxEpisode", "maxSpecial", "Genre",
+            "aktualisiert", "gesehen", "von", "Anteil",
         )
 
-        /** Column widths of the original sheet. */
+        /** Column widths of the original sheet (plus 40 for "Originaltitel"). */
         val WIDTHS = listOf(
-            3.71, 6.0, 54.57, 4.86, 6.85, 8.0, 7.42, 18.57, 11.43,
+            3.71, 6.0, 54.57, 40.0, 4.86, 6.85, 8.0, 7.42, 18.57, 11.43,
             11.43, 10.57, 11.71, 11.43, 14.86, 11.43, 8.57, 5.57, 8.57,
         )
 

@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface SeriesDao {
 
-    // Episode counts and "next" ignore nothing; the next episode skips specials (season 0).
+    // Hidden episodes never count; "next" only looks at regular episodes.
     // Without episodes, the Excel numbers from import_progress fill in.
     @Query(
         """
@@ -18,10 +18,10 @@ interface SeriesDao {
             CASE WHEN ep.total > 0 THEN ep.total ELSE COALESCE(ip.total, 0) END AS totalEpisodes,
             CASE WHEN ep.total > 0 THEN ep.watched ELSE COALESCE(ip.watched, 0) END AS watchedEpisodes,
             (SELECT se.number FROM episodes e JOIN seasons se ON e.seasonId = se.id
-                WHERE se.seriesId = s.id AND se.number > 0 AND e.watchedAt IS NULL
+                WHERE se.seriesId = s.id AND e.kind = 'REGULAR' AND e.watchedAt IS NULL
                 ORDER BY se.number, e.number LIMIT 1) AS nextSeason,
             (SELECT e.number FROM episodes e JOIN seasons se ON e.seasonId = se.id
-                WHERE se.seriesId = s.id AND se.number > 0 AND e.watchedAt IS NULL
+                WHERE se.seriesId = s.id AND e.kind = 'REGULAR' AND e.watchedAt IS NULL
                 ORDER BY se.number, e.number LIMIT 1) AS nextEpisode,
             ip.lastSeason AS excelSeason,
             ip.lastEpisode AS excelEpisode,
@@ -33,6 +33,7 @@ interface SeriesDao {
                 COUNT(*) AS total,
                 SUM(CASE WHEN e.watchedAt IS NOT NULL THEN 1 ELSE 0 END) AS watched
             FROM episodes e JOIN seasons se ON e.seasonId = se.id
+            WHERE e.kind != 'HIDDEN'
             GROUP BY se.seriesId
         ) ep ON ep.seriesId = s.id
         ORDER BY s.updatedAt DESC, s.title COLLATE NOCASE
@@ -54,8 +55,8 @@ interface SeriesDao {
         SELECT
             (SELECT COUNT(*) FROM series) AS series,
             (SELECT COUNT(*) FROM series WHERE tmdbId IS NOT NULL) AS synced,
-            (SELECT COUNT(*) FROM episodes) AS episodes,
-            (SELECT COUNT(*) FROM episodes WHERE watchedAt IS NOT NULL) AS watched
+            (SELECT COUNT(*) FROM episodes WHERE kind != 'HIDDEN') AS episodes,
+            (SELECT COUNT(*) FROM episodes WHERE kind != 'HIDDEN' AND watchedAt IS NOT NULL) AS watched
         """,
     )
     fun observeStats(): Flow<DataStats>
@@ -107,4 +108,11 @@ interface SeriesDao {
 
     @Query("SELECT * FROM series WHERE tmdbId IS NOT NULL")
     suspend fun getSynced(): List<SeriesEntity>
+
+    @Query("UPDATE series SET excelWatched = :watched, excelTotal = :total WHERE id = :id")
+    suspend fun setExcelCounts(id: Long, watched: Int?, total: Int?)
+
+    /** Matched series whose Excel numbers were lost (matched before DB version 5). */
+    @Query("SELECT * FROM series WHERE excelTotal IS NULL AND excelWatched IS NULL")
+    suspend fun getWithoutExcelCounts(): List<SeriesEntity>
 }

@@ -57,6 +57,8 @@ data class TmdbEpisodeJson(
     @SerialName("season_number") val seasonNumber: Int = 0,
     val name: String? = null,
     @SerialName("air_date") val airDate: String? = null,
+    /** Minutes. */
+    val runtime: Int? = null,
 )
 
 /** A show with all its seasons and episodes, ready to be stored. */
@@ -81,7 +83,7 @@ data class TmdbShow(
 /** A season with only its already aired episodes (as Excel counts "available" episodes). */
 data class TmdbSeason(val number: Int, val name: String?, val episodes: List<TmdbEpisode>)
 
-data class TmdbEpisode(val number: Int, val title: String?, val airDate: String?)
+data class TmdbEpisode(val number: Int, val title: String?, val airDate: String?, val runtime: Int? = null)
 
 object Tmdb {
     const val BASE_URL = "https://api.themoviedb.org/3/"

@@ -5,6 +5,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,11 +14,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -34,13 +39,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import io.github.mario2712.serientracker.data.local.EpisodeEntity
 import io.github.mario2712.serientracker.data.local.isWatched
+import io.github.mario2712.serientracker.domain.EpisodeKind
 import io.github.mario2712.serientracker.domain.Progress
 import java.time.Instant
 import java.time.LocalDate
@@ -55,16 +63,23 @@ private val dateTimeFormat = DateTimeFormatter.ofPattern("dd.MM.yyyy, HH:mm 'Uhr
 /** Episode number tile: tap toggles watched, long press opens the details. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun EpisodeChip(number: Int, watched: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
+fun EpisodeChip(
+    label: String,
+    watched: Boolean,
+    hidden: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
     val haptic = LocalHapticFeedback.current
     val colors = MaterialTheme.colorScheme
     val shape = MaterialTheme.shapes.small
     Surface(
         shape = shape,
-        color = if (watched) colors.secondaryContainer else Color.Transparent,
-        contentColor = if (watched) colors.onSecondaryContainer else colors.onSurface,
-        border = if (watched) null else BorderStroke(1.dp, colors.outline),
+        color = if (watched && !hidden) colors.secondaryContainer else Color.Transparent,
+        contentColor = if (watched && !hidden) colors.onSecondaryContainer else colors.onSurface,
+        border = if (watched && !hidden) null else BorderStroke(1.dp, colors.outline),
         modifier = Modifier
+            .alpha(if (hidden) 0.4f else 1f)
             .padding(vertical = 3.dp)
             .sizeIn(minWidth = 48.dp, minHeight = 36.dp)
             .clip(shape)
@@ -82,16 +97,21 @@ fun EpisodeChip(number: Int, watched: Boolean, onClick: () -> Unit, onLongClick:
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
-            if (watched) {
+            if (watched && !hidden) {
                 Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
             }
-            Text(number.toString(), style = MaterialTheme.typography.labelLarge)
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                textDecoration = if (hidden) TextDecoration.LineThrough else null,
+                maxLines = 1,
+            )
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun EpisodeDetailSheet(
     seasonNumber: Int,
@@ -99,19 +119,25 @@ fun EpisodeDetailSheet(
     onDismiss: () -> Unit,
     onToggle: (Boolean) -> Unit,
     onSetWatchedAt: (Long) -> Unit,
+    onRate: (Int?) -> Unit,
+    onKind: (EpisodeKind) -> Unit,
+    onDelete: () -> Unit,
 ) {
     var pickDate by remember { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
-            Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                .padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(Progress.episodeCode(seasonNumber, episode.number), style = MaterialTheme.typography.labelLarge)
+            val code = if (episode.isCustom) "Eigenes Special" else Progress.episodeCode(seasonNumber, episode.number)
+            Text(code, style = MaterialTheme.typography.labelLarge)
             Text(episode.title ?: "Kein Titel bekannt", style = MaterialTheme.typography.headlineSmall)
             Detail(
                 "Erstausstrahlung",
                 episode.airDate?.let { LocalDate.ofEpochDay(it).format(dateFormat) } ?: "unbekannt",
             )
+            episode.runtime?.let { Detail("Laufzeit", "$it Minuten") }
             Detail("Gesehen", watchedText(episode))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Gesehen", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
@@ -119,6 +145,43 @@ fun EpisodeDetailSheet(
             }
             OutlinedButton(onClick = { pickDate = true }) {
                 Text(if (episode.isWatched) "Abhak-Datum ändern" else "Mit Datum abhaken")
+            }
+
+            Text("Bewertung", style = MaterialTheme.typography.titleSmall)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                (1..10).forEach { value ->
+                    FilterChip(
+                        selected = episode.rating == value,
+                        onClick = { onRate(if (episode.rating == value) null else value) },
+                        label = { Text(value.toString()) },
+                    )
+                }
+            }
+            if (episode.rating != null) {
+                TextButton(onClick = { onRate(null) }) { Text("Bewertung entfernen") }
+            }
+
+            Text("Zählt als", style = MaterialTheme.typography.titleSmall)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                EpisodeKind.entries.forEach { kind ->
+                    FilterChip(
+                        selected = episode.kind == kind,
+                        onClick = { onKind(kind) },
+                        label = { Text(kind.label) },
+                    )
+                }
+            }
+            Text(
+                when (episode.kind) {
+                    EpisodeKind.REGULAR -> "Normale Folge der Staffel."
+                    EpisodeKind.SPECIAL -> "Zählt als Special (Excel-Spalte „Special“)."
+                    EpisodeKind.HIDDEN -> "Zählt nirgends mit, weder bei den Folgen noch in der Excel."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (episode.isCustom) {
+                OutlinedButton(onClick = onDelete) { Text("Eigenes Special löschen") }
             }
         }
     }

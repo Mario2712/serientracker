@@ -1,7 +1,9 @@
 package io.github.mario2712.serientracker.data.export
 
 import io.github.mario2712.serientracker.data.local.SeriesWithSeasons
+import io.github.mario2712.serientracker.data.local.counts
 import io.github.mario2712.serientracker.data.local.isWatched
+import io.github.mario2712.serientracker.domain.EpisodeKind
 import io.github.mario2712.serientracker.domain.ExcelRow
 import io.github.mario2712.serientracker.domain.WatchStatus
 import java.time.LocalDate
@@ -38,6 +40,7 @@ object ExcelExport {
             status = status,
             finished = finished,
             title = s.title,
+            originalTitle = s.originalTitle,
             who = s.watcher?.excelCode,
             genre = s.genre,
             updated = s.infoUpdatedAt.iso(),
@@ -68,14 +71,21 @@ object ExcelExport {
     }
 
     private fun fromEpisodes(data: SeriesWithSeasons, base: ExcelRow): ExcelRow {
-        val regular = data.seasons.filter { it.season.number > 0 }
-        val specials = data.seasons.filter { it.season.number == 0 }.flatMap { it.episodes }
-        val all = data.seasons.flatMap { it.episodes }
+        // Regular episodes with their season number; hidden ones do not count anywhere.
+        val regularEpisodes = data.seasons.flatMap { season ->
+            season.episodes.filter { it.kind == EpisodeKind.REGULAR }.map { season.season.number to it }
+        }
+        // Specials are numbered 1, 2, 3 … like in the Excel: by air date, then season and number.
+        val specials = data.seasons
+            .flatMap { season -> season.episodes.filter { it.kind == EpisodeKind.SPECIAL }.map { season.season.number to it } }
+            .sortedWith(compareBy({ it.second.airDate ?: Long.MAX_VALUE }, { it.first }, { it.second.number }))
+            .map { it.second }
+        val all = data.seasons.flatMap { it.episodes }.filter { it.counts }
         val watchedCount = all.count { it.isWatched }
         val total = all.size
 
-        val lastSeasonNumber = regular.filter { it.episodes.isNotEmpty() }.maxOfOrNull { it.season.number }
-        val maxEpisode = regular.firstOrNull { it.season.number == lastSeasonNumber }?.episodes?.maxOfOrNull { it.number }
+        val lastSeasonNumber = regularEpisodes.maxOfOrNull { it.first }
+        val maxEpisode = regularEpisodes.filter { it.first == lastSeasonNumber }.maxOfOrNull { it.second.number }
         val unseen = total > 0 && watchedCount < total
         val latestAired = all.mapNotNull { it.airDate }.maxOrNull()
         val next = base.nextAired ?: if (unseen) latestAired.iso() else null
@@ -87,18 +97,19 @@ object ExcelExport {
         )
         if (watchedCount == 0) return common // not started: position and counts stay empty
 
-        val lastRegular = regular
-            .flatMap { season -> season.episodes.filter { it.isWatched }.map { season.season.number to it } }
+        val lastRegular = regularEpisodes
+            .filter { it.second.isWatched }
             .maxWithOrNull(compareBy({ it.first }, { it.second.number }))
-        val lastSpecial = specials.filter { it.isWatched }.maxByOrNull { it.number }
+        val lastSpecialIndex = specials.indexOfLast { it.isWatched } // -1 = none watched
+        val lastSpecial = specials.getOrNull(lastSpecialIndex)
         val lastAired = listOfNotNull(lastRegular?.second?.airDate, lastSpecial?.airDate).maxOrNull()
             ?: data.series.lastWatchedAirDate
         return common.copy(
             season = lastRegular?.first ?: 0,
             episode = lastRegular?.second?.number ?: 0,
-            special = lastSpecial?.number ?: 0,
+            special = lastSpecialIndex + 1,
             lastAired = lastAired.iso(),
-            maxSpecial = specials.maxOfOrNull { it.number } ?: 0,
+            maxSpecial = specials.size,
             watched = watchedCount,
             total = total,
         )

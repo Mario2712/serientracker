@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlin.coroutines.cancellation.CancellationException
+import io.github.mario2712.serientracker.domain.EpisodeKind
 import io.github.mario2712.serientracker.ui.navigation.Routes
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -67,6 +68,22 @@ class SeriesDetailViewModel(
 
     fun setWatchedAt(episodeId: Long, watchedAt: Long) {
         viewModelScope.launch { repository.setEpisodeWatchedAt(seriesId, episodeId, watchedAt) }
+    }
+
+    fun setRating(episodeId: Long, rating: Int?) {
+        viewModelScope.launch { repository.setEpisodeRating(seriesId, episodeId, rating) }
+    }
+
+    fun setKind(episodeId: Long, kind: EpisodeKind) {
+        viewModelScope.launch { repository.setEpisodeKind(seriesId, episodeId, kind) }
+    }
+
+    fun addCustomSpecial(title: String, airDate: Long?, watched: Boolean) {
+        viewModelScope.launch { repository.addCustomSpecial(seriesId, title, airDate, watched) }
+    }
+
+    fun deleteCustomEpisode(episodeId: Long) {
+        viewModelScope.launch { repository.deleteCustomEpisode(seriesId, episodeId) }
     }
 
     fun toggleEpisode(episodeId: Long, watched: Boolean) {

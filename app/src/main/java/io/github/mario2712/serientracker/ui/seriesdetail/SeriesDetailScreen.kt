@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -34,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,7 +54,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.mario2712.serientracker.data.local.ImportProgressEntity
 import io.github.mario2712.serientracker.data.local.SeasonWithEpisodes
 import io.github.mario2712.serientracker.data.local.SeriesWithSeasons
+import io.github.mario2712.serientracker.data.local.counts
 import io.github.mario2712.serientracker.data.local.isWatched
+import io.github.mario2712.serientracker.domain.EpisodeKind
 import io.github.mario2712.serientracker.domain.Progress
 import io.github.mario2712.serientracker.ui.AppViewModelProvider
 import io.github.mario2712.serientracker.ui.components.Poster
@@ -69,6 +73,7 @@ fun SeriesDetailScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var confirmDelete by remember { mutableStateOf(false) }
     var selectedEpisodeId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var addSpecial by rememberSaveable { mutableStateOf(false) }
     val title = (state as? SeriesDetailUiState.Loaded)?.data?.series?.title.orEmpty()
 
     Scaffold(
@@ -113,9 +118,20 @@ fun SeriesDetailScreen(
                     onToggleEpisode = viewModel::toggleEpisode,
                     onToggleSeason = viewModel::toggleSeason,
                     onEpisodeDetails = { selectedEpisodeId = it },
+                    onAddSpecial = { addSpecial = true },
                 )
             }
         }
+    }
+
+    if (addSpecial) {
+        AddSpecialDialog(
+            onDismiss = { addSpecial = false },
+            onAdd = { name, airDate, watched ->
+                addSpecial = false
+                viewModel.addCustomSpecial(name, airDate, watched)
+            },
+        )
     }
 
     // Look the episode up in the live data, so the sheet updates after toggling.
@@ -131,6 +147,12 @@ fun SeriesDetailScreen(
             onDismiss = { selectedEpisodeId = null },
             onToggle = { viewModel.toggleEpisode(episode.id, it) },
             onSetWatchedAt = { viewModel.setWatchedAt(episode.id, it) },
+            onRate = { viewModel.setRating(episode.id, it) },
+            onKind = { viewModel.setKind(episode.id, it) },
+            onDelete = {
+                selectedEpisodeId = null
+                viewModel.deleteCustomEpisode(episode.id)
+            },
         )
     }
 
@@ -159,11 +181,13 @@ private fun DetailContent(
     onToggleEpisode: (Long, Boolean) -> Unit,
     onToggleSeason: (Long, Boolean) -> Unit,
     onEpisodeDetails: (Long) -> Unit,
+    onAddSpecial: () -> Unit,
 ) {
-    val all = data.seasons.flatMap { s -> s.episodes.map { s.season.number to it } }
+    // Hidden episodes do not count anywhere.
+    val all = data.seasons.flatMap { s -> s.episodes.filter { it.counts }.map { s.season.number to it } }
     val watched = all.count { it.second.isWatched }
-    // "Next" follows the regular seasons; specials are ticked by hand.
-    val next = all.firstOrNull { it.first > 0 && !it.second.isWatched }
+    // "Next" follows the regular episodes; specials are ticked by hand.
+    val next = all.firstOrNull { it.second.kind == EpisodeKind.REGULAR && !it.second.isWatched }
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -202,10 +226,19 @@ private fun DetailContent(
                 onEpisodeDetails = onEpisodeDetails,
             )
         }
+        if (data.importProgress == null && data.seasons.isNotEmpty()) {
+            item {
+                OutlinedButton(onClick = onAddSpecial) {
+                    Icon(Icons.Filled.Add, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Eigenes Special hinzufügen")
+                }
+            }
+        }
         if (all.isNotEmpty()) {
             item {
                 Text(
-                    "Tippen = abhaken · lange drücken = Details",
+                    "Tippen = abhaken · lange drücken = Details, Bewertung, als Special zählen oder ausblenden",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -217,22 +250,31 @@ private fun DetailContent(
 @Composable
 private fun Header(data: SeriesWithSeasons, watched: Int, total: Int, message: String?) {
     val series = data.series
+    val rated = data.seasons.flatMap { it.episodes }.filter { it.counts }.mapNotNull { it.rating }
     Column {
+        // Full title, wrapping; the top bar shows it in one line only.
+        Text(series.title, style = MaterialTheme.typography.headlineSmall)
+        series.originalTitle?.takeIf { !it.equals(series.title, ignoreCase = true) }?.let {
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.height(12.dp))
         Row {
             series.posterUrl?.let {
                 Poster(it, Modifier.width(96.dp).height(144.dp))
                 Spacer(Modifier.width(16.dp))
             }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                series.originalTitle?.takeIf { !it.equals(series.title, ignoreCase = true) }?.let {
-                    Text("Originaltitel: $it", style = MaterialTheme.typography.bodyMedium)
-                }
                 StatusChip(series.status)
+                val ratingText = when {
+                    series.rating != null -> "★ ${series.rating}/10"
+                    rated.isNotEmpty() -> "Ø %.1f aus %d bewerteten Folgen".format(rated.average(), rated.size)
+                    else -> null
+                }
                 val facts = listOfNotNull(
                     series.watcher?.let { "Wer: ${it.label}" },
                     series.genre,
                     series.streamingService?.takeIf { it.isNotBlank() },
-                    series.rating?.let { "★ $it/10" },
+                    ratingText,
                 )
                 if (facts.isNotEmpty()) Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
                 series.nextAirDate?.let {
@@ -246,6 +288,19 @@ private fun Header(data: SeriesWithSeasons, watched: Int, total: Int, message: S
             Text("$watched von $total Folgen gesehen", style = MaterialTheme.typography.bodyLarge)
             Spacer(Modifier.height(8.dp))
             LinearProgressIndicator(progress = { Progress.fraction(watched, total) }, modifier = Modifier.fillMaxWidth())
+        }
+        // Differences to the Excel list (e.g. TMDB lists an extra special).
+        val excelDiffers = data.importProgress == null && total > 0 &&
+            (series.excelTotal != null || series.excelWatched != null) &&
+            (series.excelTotal != total || series.excelWatched != watched)
+        if (excelDiffers) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Abweichung zur Excel: Excel ${series.excelWatched ?: "–"}/${series.excelTotal ?: "–"} · " +
+                    "App $watched/$total. Lange auf eine Folge drücken, um sie als Special zu zählen oder auszublenden.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
         }
         message?.let {
             Spacer(Modifier.height(8.dp))
@@ -302,9 +357,11 @@ private fun SeasonCard(
     onEpisodeDetails: (Long) -> Unit,
 ) {
     var expanded by rememberSaveable(season.season.id) { mutableStateOf(initiallyExpanded) }
-    val watched = season.episodes.count { it.isWatched }
-    val total = season.episodes.size
+    val counting = season.episodes.filter { it.counts }
+    val watched = counting.count { it.isWatched }
+    val total = counting.size
     val allWatched = total > 0 && watched == total
+    val ratings = counting.mapNotNull { it.rating }
 
     Card(Modifier.fillMaxWidth()) {
         Row(
@@ -316,7 +373,8 @@ private fun SeasonCard(
                     season.season.title ?: if (season.season.number == 0) "Specials" else "Staffel ${season.season.number}",
                     style = MaterialTheme.typography.titleMedium,
                 )
-                Text("$watched/$total", style = MaterialTheme.typography.bodySmall)
+                val avg = ratings.takeIf { it.isNotEmpty() }?.let { " · Ø %.1f (%d bewertet)".format(it.average(), it.size) }
+                Text("$watched/$total${avg.orEmpty()}", style = MaterialTheme.typography.bodySmall)
             }
             Checkbox(
                 checked = allWatched,
@@ -336,8 +394,13 @@ private fun SeasonCard(
             ) {
                 season.episodes.forEach { ep ->
                     EpisodeChip(
-                        number = ep.number,
+                        label = when {
+                            ep.isCustom -> ep.title?.take(12) ?: "Special"
+                            ep.kind == EpisodeKind.SPECIAL && season.season.number > 0 -> "S ${ep.number}"
+                            else -> ep.number.toString()
+                        },
                         watched = ep.isWatched,
+                        hidden = ep.kind == EpisodeKind.HIDDEN,
                         onClick = { onToggleEpisode(ep.id, !ep.isWatched) },
                         onLongClick = { onEpisodeDetails(ep.id) },
                     )

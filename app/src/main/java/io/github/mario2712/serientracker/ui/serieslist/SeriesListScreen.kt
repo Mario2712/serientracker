@@ -65,6 +65,7 @@ fun SeriesListScreen(
     onSyncClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
+    onStatsClick: () -> Unit,
     viewModel: SeriesListViewModel = viewModel(factory = AppViewModelProvider.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -83,6 +84,10 @@ fun SeriesListScreen(
                             text = { Text("TMDB-Abgleich") },
                             leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
                             onClick = { menuOpen = false; onSyncClick() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Statistik") },
+                            onClick = { menuOpen = false; onStatsClick() },
                         )
                         DropdownMenuItem(
                             text = { Text("Einstellungen") },
@@ -216,7 +221,7 @@ private fun SeriesRow(item: SeriesOverview, onClick: () -> Unit, onWatchNext: ()
                 Text(
                     item.series.title,
                     style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 item.series.originalTitle?.takeIf { !it.equals(item.series.title, ignoreCase = true) }?.let {

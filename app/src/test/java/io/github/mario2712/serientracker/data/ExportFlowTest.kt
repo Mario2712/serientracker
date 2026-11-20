@@ -63,7 +63,9 @@ class ExportFlowTest {
         }
         assertTrue("[Content_Types].xml" in entries)
         val serien = entries.getValue("xl/worksheets/sheet1.xml")
-        assertTrue(serien.contains("<f>P2/Q2</f>"))
+        assertTrue(serien.contains("<f>Q2/R2</f>"))
+        assertTrue(serien.contains("Originaltitel"))
+        assertTrue(serien.contains("sqref=\"K1:K1048576\""))
         assertTrue(serien.contains("12 Monkeys"))
         assertEquals(362, Regex("<row ").findAll(serien).count()) // header + 361 series
         val info = entries.getValue("xl/worksheets/sheet2.xml")
@@ -119,7 +121,7 @@ class ExportFlowTest {
     }
 
     @Test
-    fun `migration 2 to 3 keeps data and flags imported watches`() {
+    fun `migration 2 to 5 keeps data, flags imported watches and marks specials`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val name = "migration-test.db"
         context.deleteDatabase(name)
@@ -130,17 +132,30 @@ class ExportFlowTest {
             old.execSQL("INSERT INTO episodes (id, seasonId, number, watchedAt) VALUES (1, 1, 1, 1579820400000)") // midnight → imported
             old.execSQL("INSERT INTO episodes (id, seasonId, number, watchedAt) VALUES (2, 1, 2, 1700000123456)") // real tap
             old.execSQL("INSERT INTO episodes (id, seasonId, number) VALUES (3, 1, 3)")
+            old.execSQL("INSERT INTO seasons (id, seriesId, number) VALUES (2, 1, 0)")
+            old.execSQL("INSERT INTO episodes (id, seasonId, number) VALUES (4, 2, 1)")
+            old.execSQL("INSERT INTO series (id, title, status, isFavorite, createdAt, updatedAt) VALUES (2, 'Y', 'PAUSED', 0, 0, 0)")
+            old.execSQL("INSERT INTO import_progress (seriesId, watched, total) VALUES (2, 3, 10)")
             old.version = 2
         }
 
         val migrated = AppDatabase.build(context, name)
         try {
-            val episodes = migrated.openHelper.readableDatabase
-                .query("SELECT id, watchedAtImported FROM episodes ORDER BY id").use { c ->
-                    buildList { while (c.moveToNext()) add(c.getLong(0) to c.getInt(1)) }
-                }
-            assertEquals(listOf(1L to 1, 2L to 0, 3L to 0), episodes)
-            assertEquals(1, migrated.openHelper.readableDatabase.query("SELECT COUNT(*) FROM series").use { it.moveToFirst(); it.getInt(0) })
+            val sql = migrated.openHelper.readableDatabase
+            val episodes = sql.query("SELECT id, watchedAtImported, kind FROM episodes ORDER BY id").use { c ->
+                buildList { while (c.moveToNext()) add(Triple(c.getLong(0), c.getInt(1), c.getString(2))) }
+            }
+            assertEquals(
+                listOf(Triple(1L, 1, "REGULAR"), Triple(2L, 0, "REGULAR"), Triple(3L, 0, "REGULAR"), Triple(4L, 0, "SPECIAL")),
+                episodes,
+            )
+            assertEquals(2, sql.query("SELECT COUNT(*) FROM series").use { it.moveToFirst(); it.getInt(0) })
+            // Excel counts of not yet matched series are copied from import_progress.
+            sql.query("SELECT excelWatched, excelTotal FROM series WHERE id = 2").use {
+                it.moveToFirst()
+                assertEquals(3, it.getInt(0))
+                assertEquals(10, it.getInt(1))
+            }
         } finally {
             migrated.close()
             context.deleteDatabase(name)

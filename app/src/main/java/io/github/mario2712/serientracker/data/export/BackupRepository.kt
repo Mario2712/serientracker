@@ -7,6 +7,7 @@ import io.github.mario2712.serientracker.data.local.ImportProgressEntity
 import io.github.mario2712.serientracker.data.local.SeasonEntity
 import io.github.mario2712.serientracker.data.local.SeriesEntity
 import io.github.mario2712.serientracker.data.local.SeriesWithSeasons
+import io.github.mario2712.serientracker.domain.EpisodeKind
 import io.github.mario2712.serientracker.domain.WatchStatus
 import io.github.mario2712.serientracker.domain.Watcher
 import kotlinx.serialization.Serializable
@@ -44,6 +45,9 @@ data class BackupSeries(
     val lastWatchedAirDate: Long? = null,
     val nextAirDate: Long? = null,
     val infoUpdatedAt: Long? = null,
+    val tmdbMetaVersion: Int = 0,
+    val excelWatched: Int? = null,
+    val excelTotal: Int? = null,
     val createdAt: Long = 0,
     val updatedAt: Long = 0,
     val importProgress: BackupImportProgress? = null,
@@ -74,6 +78,10 @@ data class BackupEpisode(
     val airDate: Long? = null,
     val watchedAt: Long? = null,
     val watchedAtImported: Boolean = false,
+    val rating: Int? = null,
+    val kind: EpisodeKind? = null,
+    val isCustom: Boolean = false,
+    val runtime: Int? = null,
 )
 
 class BackupFormatException(message: String) : Exception(message)
@@ -137,6 +145,9 @@ class BackupRepository(
                 lastWatchedAirDate = b.lastWatchedAirDate,
                 nextAirDate = b.nextAirDate,
                 infoUpdatedAt = b.infoUpdatedAt,
+                tmdbMetaVersion = b.tmdbMetaVersion,
+                excelWatched = b.excelWatched,
+                excelTotal = b.excelTotal,
                 createdAt = b.createdAt,
                 updatedAt = b.updatedAt,
             ),
@@ -169,6 +180,11 @@ class BackupRepository(
                         airDate = it.airDate,
                         watchedAt = it.watchedAt,
                         watchedAtImported = it.watchedAtImported,
+                        rating = it.rating,
+                        // Archives from before v0.3 have no kind: season 0 held the specials.
+                        kind = it.kind ?: if (season.number == 0) EpisodeKind.SPECIAL else EpisodeKind.REGULAR,
+                        isCustom = it.isCustom,
+                        runtime = it.runtime,
                     )
                 },
             )
@@ -193,6 +209,9 @@ class BackupRepository(
             lastWatchedAirDate = s.lastWatchedAirDate,
             nextAirDate = s.nextAirDate,
             infoUpdatedAt = s.infoUpdatedAt,
+            tmdbMetaVersion = s.tmdbMetaVersion,
+            excelWatched = s.excelWatched,
+            excelTotal = s.excelTotal,
             createdAt = s.createdAt,
             updatedAt = s.updatedAt,
             importProgress = d.importProgress?.let { p ->
@@ -206,7 +225,17 @@ class BackupRepository(
                     number = season.season.number,
                     title = season.season.title,
                     episodes = season.episodes.sortedBy { it.number }.map {
-                        BackupEpisode(it.number, it.title, it.airDate, it.watchedAt, it.watchedAtImported)
+                        BackupEpisode(
+                            number = it.number,
+                            title = it.title,
+                            airDate = it.airDate,
+                            watchedAt = it.watchedAt,
+                            watchedAtImported = it.watchedAtImported,
+                            rating = it.rating,
+                            kind = it.kind,
+                            isCustom = it.isCustom,
+                            runtime = it.runtime,
+                        )
                     },
                 )
             },

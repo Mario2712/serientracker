@@ -7,6 +7,7 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Relation
+import io.github.mario2712.serientracker.domain.EpisodeKind
 import io.github.mario2712.serientracker.domain.WatchStatus
 import io.github.mario2712.serientracker.domain.Watcher
 
@@ -35,6 +36,11 @@ data class SeriesEntity(
     val nextAirDate: Long? = null,
     /** When the series info was last refreshed (epoch day, Excel "aktualisiert" or TMDB sync). */
     val infoUpdatedAt: Long? = null,
+    /** Below [TMDB_META_VERSION], the next sync takes title, original title and genre from TMDB. */
+    @ColumnInfo(defaultValue = "0") val tmdbMetaVersion: Int = 0,
+    /** Excel "gesehen"/"von" at import, kept after the TMDB match to show differences. */
+    val excelWatched: Int? = null,
+    val excelTotal: Int? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
 )
@@ -81,9 +87,23 @@ data class EpisodeEntity(
     val watchedAt: Long? = null,
     /** watchedAt is only the Excel "aktualisiert" date, not the real moment. */
     @ColumnInfo(defaultValue = "0") val watchedAtImported: Boolean = false,
+    /** Own rating 1..10, null = not rated. */
+    val rating: Int? = null,
+    @ColumnInfo(defaultValue = "'REGULAR'") val kind: EpisodeKind = EpisodeKind.REGULAR,
+    /** Special added by hand (not from TMDB); never touched by a refresh. */
+    @ColumnInfo(defaultValue = "0") val isCustom: Boolean = false,
+    /** Runtime in minutes, from TMDB. */
+    val runtime: Int? = null,
 )
 
+/** Current version of the TMDB metadata rules (title, original title, genre). */
+const val TMDB_META_VERSION = 1
+
+/** Custom specials get numbers from here on, so they never clash with TMDB numbers. */
+const val CUSTOM_EPISODE_START = 1000
+
 val EpisodeEntity.isWatched: Boolean get() = watchedAt != null
+val EpisodeEntity.counts: Boolean get() = kind != EpisodeKind.HIDDEN
 
 /**
  * Excel position of a series that has not been matched with TMDB yet.

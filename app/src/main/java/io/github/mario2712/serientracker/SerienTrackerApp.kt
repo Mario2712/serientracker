@@ -5,6 +5,7 @@ import android.content.ContentResolver
 import android.util.Log
 import io.github.mario2712.serientracker.data.export.BackupRepository
 import io.github.mario2712.serientracker.data.export.ExportRepository
+import io.github.mario2712.serientracker.data.stats.StatsRepository
 import io.github.mario2712.serientracker.data.local.AppDatabase
 import io.github.mario2712.serientracker.data.remote.TmdbClient
 import io.github.mario2712.serientracker.data.repository.SeriesRepository
@@ -27,6 +28,8 @@ class SerienTrackerApp : Application() {
         container.appScope.launch {
             runCatching { container.seedImporter.importIfNeeded() }
                 .onFailure { Log.e("SerienTracker", "Excel-Startdaten konnten nicht geladen werden", it) }
+            runCatching { container.seedImporter.backfillExcelCounts() }
+                .onFailure { Log.e("SerienTracker", "Excel-Vergleichswerte konnten nicht nachgetragen werden", it) }
         }
     }
 }
@@ -45,6 +48,7 @@ class AppContainer(app: Application) {
     private val database: AppDatabase by lazy { AppDatabase.build(app) }
     val exportRepository: ExportRepository by lazy { ExportRepository(database, appVersion) }
     val backupRepository: BackupRepository by lazy { BackupRepository(database, appVersion) }
+    val statsRepository: StatsRepository by lazy { StatsRepository(database) }
     val settings: SettingsRepository by lazy { SettingsRepository(app) }
     val seriesRepository: SeriesRepository by lazy { SeriesRepository(database) }
     val tmdbClient: TmdbClient by lazy { TmdbClient { settings.currentTmdbApiKey() } }

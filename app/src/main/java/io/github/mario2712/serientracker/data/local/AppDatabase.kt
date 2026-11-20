@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [SeriesEntity::class, SeasonEntity::class, EpisodeEntity::class, ImportProgressEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -39,9 +39,32 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v5: episode rating, kind (regular/special/hidden), custom specials, runtime; Excel counts on series. */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE episodes ADD COLUMN rating INTEGER")
+                db.execSQL("ALTER TABLE episodes ADD COLUMN kind TEXT NOT NULL DEFAULT 'REGULAR'")
+                db.execSQL("ALTER TABLE episodes ADD COLUMN isCustom INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE episodes ADD COLUMN runtime INTEGER")
+                db.execSQL("UPDATE episodes SET kind = 'SPECIAL' WHERE seasonId IN (SELECT id FROM seasons WHERE number = 0)")
+                db.execSQL("ALTER TABLE series ADD COLUMN tmdbMetaVersion INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE series ADD COLUMN excelWatched INTEGER")
+                db.execSQL("ALTER TABLE series ADD COLUMN excelTotal INTEGER")
+                // Series not matched yet still have their Excel numbers in import_progress.
+                db.execSQL(
+                    """
+                    UPDATE series SET
+                        excelWatched = (SELECT watched FROM import_progress WHERE seriesId = series.id),
+                        excelTotal = (SELECT total FROM import_progress WHERE seriesId = series.id)
+                    WHERE id IN (SELECT seriesId FROM import_progress)
+                    """.trimIndent(),
+                )
+            }
+        }
+
         fun build(context: Context, name: String = NAME): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, name)
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 // Version 1 was only the empty skeleton; its data is replaced by the Excel seed.
                 .fallbackToDestructiveMigrationFrom(1)
                 .build()

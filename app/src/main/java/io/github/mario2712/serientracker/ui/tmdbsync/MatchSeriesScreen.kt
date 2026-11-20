@@ -48,7 +48,7 @@ fun MatchSeriesScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(viewModel.title.ifEmpty { "Zuordnen" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text(viewModel.title.ifEmpty { "Zuordnen" }, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onDone) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")

@@ -13,6 +13,7 @@ import io.github.mario2712.serientracker.data.repository.MatchOutcome
 import io.github.mario2712.serientracker.data.repository.SeriesRepository
 import io.github.mario2712.serientracker.data.repository.TmdbSyncRepository
 import io.github.mario2712.serientracker.data.seed.SeedImporter
+import io.github.mario2712.serientracker.domain.EpisodeKind
 import io.github.mario2712.serientracker.domain.WatchStatus
 import io.github.mario2712.serientracker.domain.Watcher
 import kotlinx.coroutines.flow.first
@@ -38,7 +39,8 @@ class SyncFlowTest {
         {"version":1,"series":[
         {"status":2,"finished":0,"title":"12 Monkeys","who":"M","season":1,"episode":2,"special":0,"maxSeason":4,"maxEpisode":11,"maxSpecial":0,"genre":"Mystery","updated":"2020-01-24","watched":2,"total":47},
         {"status":2,"finished":0,"title":"Black Mirror","who":"B","season":7,"episode":6,"special":2,"maxSeason":7,"maxEpisode":6,"maxSpecial":2,"genre":"Mystery","updated":"2025-07-11","watched":34,"total":34},
-        {"status":0,"finished":0,"title":"24","who":null,"maxSeason":8,"maxEpisode":24}
+        {"status":0,"finished":0,"title":"24","who":null,"maxSeason":8,"maxEpisode":24},
+        {"status":0,"finished":1,"title":"Altered Carbon","who":"B","season":2,"episode":8,"special":1,"maxSeason":2,"maxEpisode":8,"maxSpecial":1,"genre":"Action","updated":"2023-07-24","watched":19,"total":19}
         ]}
     """.trimIndent()
 
@@ -64,7 +66,7 @@ class SyncFlowTest {
         importer().importIfNeeded()
         val overview = SeriesRepository(db).observeOverview().first().associateBy { it.series.title }
 
-        assertEquals(3, overview.size)
+        assertEquals(4, overview.size)
         val monkeys = overview.getValue("12 Monkeys")
         assertEquals(WatchStatus.PAUSED, monkeys.series.status)
         assertEquals(Watcher.ME, monkeys.series.watcher)
@@ -75,7 +77,70 @@ class SyncFlowTest {
 
         // Second start does not import again.
         importer().importIfNeeded()
-        assertEquals(3, db.seriesDao().count())
+        assertEquals(4, db.seriesDao().count())
+    }
+
+    @Test
+    fun `extra tmdb specials are hidden, title and excel counts kept`() = runTest {
+        importer().importIfNeeded()
+        val sync = TmdbSyncRepository(db, fake)
+        val ac = db.seriesDao().getAll().first { it.title == "Altered Carbon" }
+
+        val outcome = sync.autoMatch(ac)
+
+        assertTrue(outcome is MatchOutcome.Matched)
+        val report = (outcome as MatchOutcome.Matched).report
+        assertEquals(19, report.total)
+        assertEquals(19, report.watched)
+        assertFalse(report.hasDifference)
+        val stored = db.seriesDao().observeSeries(ac.id).first()!!
+        val specials = stored.seasons.first { it.season.number == 0 }.episodes.sortedBy { it.number }
+        assertEquals(listOf(EpisodeKind.SPECIAL, EpisodeKind.HIDDEN), specials.map { it.kind })
+        assertTrue(specials[0].isWatched)
+        assertFalse(specials[1].isWatched)
+        // German TMDB title replaces the Excel title; the original title is kept beside it.
+        assertEquals("Altered Carbon – Das Unsterblichkeitsprogramm", stored.series.title)
+        assertEquals("Altered Carbon", stored.series.originalTitle)
+        assertEquals(19, stored.series.excelTotal)
+        assertEquals(WatchStatus.COMPLETED, stored.series.status)
+
+        // A title edited by hand survives a refresh.
+        db.seriesDao().update(stored.series.copy(title = "Altered Carbon"))
+        sync.refresh(ac.id)
+        assertEquals("Altered Carbon", db.seriesDao().getSeries(ac.id)!!.title)
+    }
+
+    @Test
+    fun `custom special, kind and rating change the counts`() = runTest {
+        importer().importIfNeeded()
+        val sync = TmdbSyncRepository(db, fake)
+        val repo = SeriesRepository(db)
+        val ac = db.seriesDao().getAll().first { it.title == "Altered Carbon" }
+        sync.link(ac.id, 400)
+        assertEquals(19, db.episodeDao().countEpisodes(ac.id))
+
+        // Resleeved is a film on TMDB: add it as own special.
+        val id = repo.addCustomSpecial(ac.id, "Resleeved", null, watched = true)
+        assertEquals(20, db.episodeDao().countEpisodes(ac.id))
+        assertEquals(20, db.episodeDao().countWatched(ac.id))
+        assertTrue(db.episodeDao().getEpisode(id)!!.number >= 1000)
+
+        // Hiding it again → back to 19; deleting removes it.
+        repo.setEpisodeKind(ac.id, id, EpisodeKind.HIDDEN)
+        assertEquals(19, db.episodeDao().countEpisodes(ac.id))
+        repo.deleteCustomEpisode(ac.id, id)
+        assertEquals(null, db.episodeDao().getEpisode(id))
+
+        // Rating an unwatched episode also ticks it.
+        val monkeys = db.seriesDao().getAll().first { it.title == "12 Monkeys" }
+        sync.link(monkeys.id, 100)
+        val unwatched = db.seriesDao().observeSeries(monkeys.id).first()!!
+            .seasons.first { it.season.number == 2 }.episodes.first()
+        repo.setEpisodeRating(monkeys.id, unwatched.id, 9)
+        val rated = db.episodeDao().getEpisode(unwatched.id)!!
+        assertEquals(9, rated.rating)
+        assertTrue(rated.isWatched)
+        assertFalse(rated.watchedAtImported)
     }
 
     @Test
@@ -167,6 +232,7 @@ class SyncFlowTest {
             "12 Monkeys" -> listOf(TmdbSearchResult(100, "12 Monkeys", "12 Monkeys"))
             "Black Mirror" -> listOf(TmdbSearchResult(200, "Black Mirror", "Black Mirror"))
             "24" -> listOf(TmdbSearchResult(300, "24", "24"))
+            "Altered Carbon" -> listOf(TmdbSearchResult(400, "Altered Carbon – Das Unsterblichkeitsprogramm", "Altered Carbon"))
             else -> emptyList()
         }
 
@@ -174,13 +240,25 @@ class SyncFlowTest {
             100 -> show(id, "12 Monkeys", listOf(13, 13, 10, 11 + extraEpisodes), specials = 1, status = "Ended")
             // 32 regular episodes over 7 seasons + 2 specials = 34, as in the Excel.
             200 -> show(id, "Black Mirror", listOf(3, 4, 6, 6, 3, 5, 5), specials = 2, status = "Returning Series")
+            // TMDB lists 2 specials, the Excel counts only 1 (the other is an extra for the user).
+            400 -> show(
+                id, "Altered Carbon – Das Unsterblichkeitsprogramm", listOf(10, 8), specials = 2, status = "Canceled",
+                originalName = "Altered Carbon",
+            )
             else -> show(id, "24", List(seasonsFor24) { 24 }, specials = 0, status = "Ended")
         }
 
-        private fun show(id: Int, name: String, perSeason: List<Int>, specials: Int, status: String) = TmdbShow(
+        private fun show(
+            id: Int,
+            name: String,
+            perSeason: List<Int>,
+            specials: Int,
+            status: String,
+            originalName: String = name,
+        ) = TmdbShow(
             id = id,
             name = name,
-            originalName = name,
+            originalName = originalName,
             status = status,
             posterUrl = null,
             nextAirDate = null,

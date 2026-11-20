@@ -7,6 +7,7 @@ import io.github.mario2712.serientracker.data.local.SeriesEntity
 import io.github.mario2712.serientracker.domain.ExcelMapping
 import io.github.mario2712.serientracker.domain.ExcelRow
 import io.github.mario2712.serientracker.domain.ExcelSeed
+import io.github.mario2712.serientracker.domain.TitleMatcher
 import kotlinx.serialization.json.Json
 import java.time.LocalDate
 import java.time.ZoneId
@@ -37,6 +38,31 @@ class SeedImporter(
 
     fun parse(): ExcelSeed = json.decodeFromString(readSeed())
 
+    /**
+     * Series matched before DB version 5 lost their Excel "gesehen/von" together with import_progress.
+     * Takes them from the bundled Excel list by title. Cheap and idempotent; runs on every start
+     * (before a sync could rename the series to its TMDB title).
+     */
+    suspend fun backfillExcelCounts(): Int {
+        val dao = db.seriesDao()
+        val missing = dao.getWithoutExcelCounts()
+        if (missing.isEmpty()) return 0
+        val rows = parse().series
+        val byTitle = rows.associateBy { it.title.trim() }
+        val byNormalized = rows.associateBy { TitleMatcher.normalize(it.title) }
+        var filled = 0
+        db.withTransaction {
+            missing.forEach { s ->
+                val row = byTitle[s.title.trim()] ?: byNormalized[TitleMatcher.normalize(s.title)] ?: return@forEach
+                if (row.watched != null || row.total != null) {
+                    dao.setExcelCounts(s.id, row.watched, row.total)
+                    filled++
+                }
+            }
+        }
+        return filled
+    }
+
     private suspend fun importAll(): Int = db.withTransaction {
         val rows = parse().series
         rows.forEach { insert(it) }
@@ -58,6 +84,8 @@ class SeedImporter(
                 lastWatchedAirDate = ExcelMapping.epochDay(row.lastAired),
                 nextAirDate = ExcelMapping.epochDay(row.nextAired),
                 infoUpdatedAt = ExcelMapping.epochDay(row.updated),
+                excelWatched = row.watched,
+                excelTotal = row.total,
                 createdAt = updatedMs ?: System.currentTimeMillis(),
                 // Sorting by updatedAt shows recently touched series first, like in the Excel.
                 updatedAt = updatedMs ?: 0L,

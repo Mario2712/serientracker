@@ -2,7 +2,9 @@ package io.github.mario2712.serientracker.data.repository
 
 import androidx.room.withTransaction
 import io.github.mario2712.serientracker.data.local.AppDatabase
+import io.github.mario2712.serientracker.data.local.CUSTOM_EPISODE_START
 import io.github.mario2712.serientracker.data.local.DataStats
+import io.github.mario2712.serientracker.domain.EpisodeKind
 import io.github.mario2712.serientracker.data.local.EpisodeEntity
 import io.github.mario2712.serientracker.data.local.SeasonEntity
 import io.github.mario2712.serientracker.data.local.SeriesEntity
@@ -77,6 +79,48 @@ class SeriesRepository(private val db: AppDatabase) {
     suspend fun setEpisodeWatchedAt(seriesId: Long, episodeId: Long, watchedAt: Long) = db.withTransaction {
         episodeDao.setWatched(episodeId, watchedAt)
         afterProgressChange(seriesId, Progress.Change.WATCHED)
+    }
+
+    /** Own rating 1..10 (null clears it). Rating an unwatched episode also ticks it. */
+    suspend fun setEpisodeRating(seriesId: Long, episodeId: Long, rating: Int?) = db.withTransaction {
+        episodeDao.setRating(episodeId, rating?.coerceIn(1, 10))
+        val episode = episodeDao.getEpisode(episodeId)
+        if (rating != null && episode != null && episode.watchedAt == null) {
+            episodeDao.setWatched(episodeId, System.currentTimeMillis())
+            afterProgressChange(seriesId, Progress.Change.WATCHED)
+        }
+    }
+
+    /** Regular episode, special or hidden (does not count). */
+    suspend fun setEpisodeKind(seriesId: Long, episodeId: Long, kind: EpisodeKind) = db.withTransaction {
+        episodeDao.setKind(episodeId, kind)
+        afterProgressChange(seriesId, Progress.Change.NEW_EPISODES)
+    }
+
+    /** Adds a special TMDB does not know (e.g. a film the user counts as special). */
+    suspend fun addCustomSpecial(seriesId: Long, title: String, airDate: Long?, watched: Boolean): Long =
+        db.withTransaction {
+            val seasonId = episodeDao.getSeasons(seriesId).firstOrNull { it.number == 0 }?.id
+                ?: episodeDao.insertSeason(SeasonEntity(seriesId = seriesId, number = 0, title = "Specials"))
+            val number = maxOf(episodeDao.maxEpisodeNumber(seasonId), CUSTOM_EPISODE_START - 1) + 1
+            val id = episodeDao.insertEpisode(
+                EpisodeEntity(
+                    seasonId = seasonId,
+                    number = number,
+                    title = title.trim().ifEmpty { "Special" },
+                    airDate = airDate,
+                    watchedAt = if (watched) System.currentTimeMillis() else null,
+                    kind = EpisodeKind.SPECIAL,
+                    isCustom = true,
+                ),
+            )
+            afterProgressChange(seriesId, if (watched) Progress.Change.WATCHED else Progress.Change.NEW_EPISODES)
+            id
+        }
+
+    suspend fun deleteCustomEpisode(seriesId: Long, episodeId: Long) = db.withTransaction {
+        episodeDao.deleteCustomEpisode(episodeId)
+        afterProgressChange(seriesId, Progress.Change.NEW_EPISODES)
     }
 
     /** Marks the first unwatched episode as watched. Returns false if there is none. */

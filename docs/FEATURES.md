@@ -19,6 +19,18 @@
 - ✅ **Archiv** (JSON) exportieren und wiederherstellen
 - ✅ Folgendetails per langem Drücken: Titel, Erstausstrahlung, abgehakt am (änderbar)
 - ✅ „Über“-Screen: Version, Entwickler, Datenstand
+- ✅ Deutscher TMDB-Titel + Originaltitel (auch als Excel-Spalte), lange Titel vollständig lesbar
+- ✅ Bewertung pro Folge (1–10), Ø je Staffel und Serie
+- ✅ Folgen-Typ: Folge / Special / ausgeblendet, eigene Specials (z. B. Filme wie „Resleeved“)
+- ✅ Abweichungen zur Excel dauerhaft sichtbar (Detail + Statistik)
+- ✅ **Statistik:** Genres (Folgen/Stunden), Top-Folgen/-Staffeln/-Serien, Sehzeit (gesamt/Jahr/Serie),
+  Verlauf 12 Monate, aktivster Tag, längster Binge, Wer & Status, Stapel der Schande
+
+## Weitere Statistik-Ideen
+- 💡 Ich vs. TMDB-Bewertung (strenger/großzügiger)
+- 💡 Ø Tage zwischen Ausstrahlung und Schauen („wie aktuell schaue ich“)
+- 💡 Jahresrückblick (Top-Serie, Stunden, Binge des Jahres)
+- 💡 Wochentag/Uhrzeit-Heatmap
 - 🔜 Rückgängig-Snackbar nach dem Abhaken oder Löschen
 
 ## Komfort

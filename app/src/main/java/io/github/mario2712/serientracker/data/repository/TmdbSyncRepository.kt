@@ -5,9 +5,11 @@ import io.github.mario2712.serientracker.data.local.AppDatabase
 import io.github.mario2712.serientracker.data.local.EpisodeEntity
 import io.github.mario2712.serientracker.data.local.SeasonEntity
 import io.github.mario2712.serientracker.data.local.SeriesEntity
+import io.github.mario2712.serientracker.data.local.TMDB_META_VERSION
 import io.github.mario2712.serientracker.data.remote.TmdbDataSource
 import io.github.mario2712.serientracker.data.remote.TmdbSearchResult
 import io.github.mario2712.serientracker.data.remote.TmdbShow
+import io.github.mario2712.serientracker.domain.EpisodeKind
 import io.github.mario2712.serientracker.domain.Progress
 import io.github.mario2712.serientracker.domain.TitleMatcher
 import kotlinx.coroutines.flow.Flow
@@ -110,10 +112,23 @@ class TmdbSyncRepository(
                 SeasonEntity(seriesId = seriesId, number = season.number, title = if (season.number == 0) "Specials" else null),
             )
             val existing = episodeDao.getEpisodes(seasonId).associateBy { it.number }
+            // First sync: only as many TMDB specials count as the Excel says; the rest is hidden.
+            // TMDB often lists extras there that are no specials for the user.
+            val countedSpecials = if (season.number == 0 && progress != null) {
+                season.episodes.sortedBy { it.number }.take(progress.maxSpecial ?: 0).map { it.number }
+            } else {
+                null
+            }
             val newEpisodes = season.episodes.filter { it.number !in existing }.map { ep ->
-                val watched = progress != null && Progress.isWatchedAtPosition(
+                val kind = when {
+                    season.number > 0 -> EpisodeKind.REGULAR
+                    countedSpecials == null || ep.number in countedSpecials -> EpisodeKind.SPECIAL
+                    else -> EpisodeKind.HIDDEN
+                }
+                val watched = progress != null && kind != EpisodeKind.HIDDEN && Progress.isWatchedAtPosition(
                     season = season.number,
-                    episode = ep.number,
+                    // Specials: the Excel counts them 1, 2, 3 … among the counted ones.
+                    episode = if (season.number == 0) countedSpecials!!.indexOf(ep.number) + 1 else ep.number,
                     lastSeason = progress.lastSeason,
                     lastEpisode = progress.lastEpisode,
                     lastSpecial = progress.lastSpecial,
@@ -125,11 +140,15 @@ class TmdbSyncRepository(
                     airDate = ep.airDate.toEpochDay(),
                     watchedAt = if (watched) watchedAt else null,
                     watchedAtImported = watched,
+                    kind = kind,
+                    runtime = ep.runtime,
                 )
             }
             episodeDao.insertEpisodes(newEpisodes)
             season.episodes.forEach { ep ->
-                existing[ep.number]?.let { episodeDao.setEpisodeInfo(it.id, ep.title, ep.airDate.toEpochDay()) }
+                existing[ep.number]?.let {
+                    episodeDao.setEpisodeInfo(it.id, ep.title, ep.airDate.toEpochDay(), ep.runtime)
+                }
             }
         }
         if (progress != null) seriesDao.deleteImportProgress(seriesId)
@@ -141,15 +160,24 @@ class TmdbSyncRepository(
         } else {
             series.status
         }
-        // Genre and original title come from TMDB when the show is linked (or was linked before
-        // these fields existed). Later refreshes keep a genre the user edited by hand.
-        val fillMeta = series.tmdbId != show.id || series.originalTitle == null
+        // German title, original title and genre come from TMDB when the show is linked, or once
+        // after the rules changed (tmdbMetaVersion). Later refreshes keep hand-made edits.
+        val fillMeta = series.tmdbId != show.id || series.tmdbMetaVersion < TMDB_META_VERSION
         val tmdbGenre = show.genres.joinToString(", ").ifBlank { null }
+        val newTitle = if (fillMeta) show.name.trim().ifBlank { series.title } else series.title
         seriesDao.update(
             series.copy(
                 tmdbId = show.id,
-                originalTitle = show.originalName.ifBlank { show.name }.ifBlank { null } ?: series.originalTitle,
+                title = newTitle,
+                originalTitle = if (fillMeta || series.originalTitle == null) {
+                    show.originalName.trim().ifBlank { null } ?: series.originalTitle
+                } else {
+                    series.originalTitle
+                },
                 genre = if (fillMeta) tmdbGenre ?: series.genre else series.genre,
+                tmdbMetaVersion = TMDB_META_VERSION,
+                excelWatched = series.excelWatched ?: progress?.watched,
+                excelTotal = series.excelTotal ?: progress?.total,
                 posterUrl = show.posterUrl ?: series.posterUrl,
                 isEnded = show.isEnded,
                 nextAirDate = show.nextAirDate.toEpochDay() ?: series.nextAirDate,
@@ -157,7 +185,7 @@ class TmdbSyncRepository(
                 status = status,
             ),
         )
-        SyncReport(seriesId, series.title, progress?.watched, progress?.total, watched, total)
+        SyncReport(seriesId, newTitle, progress?.watched, progress?.total, watched, total)
     }
 
     private fun String?.toEpochDay(): Long? =
