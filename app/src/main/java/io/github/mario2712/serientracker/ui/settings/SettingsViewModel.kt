@@ -4,6 +4,9 @@ import android.content.ContentResolver
 import android.content.Intent
 import android.net.Uri
 import io.github.mario2712.serientracker.data.settings.BackgroundSettings
+import io.github.mario2712.serientracker.data.repository.SeriesRepository
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import io.github.mario2712.serientracker.work.AutoBackup
 import io.github.mario2712.serientracker.work.WorkScheduler
 import kotlinx.coroutines.flow.SharingStarted
@@ -35,6 +38,7 @@ class SettingsViewModel(
     private val backupRepository: BackupRepository,
     private val contentResolver: ContentResolver,
     private val workScheduler: WorkScheduler,
+    private val seriesRepository: SeriesRepository,
 ) : ViewModel() {
 
     /** Notification and auto-backup state for the settings screen. */
@@ -46,6 +50,33 @@ class SettingsViewModel(
 
     fun setShowExcel(show: Boolean) {
         viewModelScope.launch { settings.setShowExcelComparisons(show) }
+    }
+
+    val catchUpMode: StateFlow<Boolean> = settings.catchUpMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun setCatchUpMode(on: Boolean) {
+        viewModelScope.launch { settings.setCatchUpMode(on) }
+    }
+
+    /** Days with the most real ticks, to correct catch-up days in the statistics. */
+    var busiestDays by mutableStateOf<List<Pair<LocalDate, Int>>>(emptyList())
+        private set
+
+    fun loadBusiestDays() {
+        viewModelScope.launch { busiestDays = seriesRepository.busiestDays() }
+    }
+
+    /** Number of real ticks on [date] (for the confirmation dialog). */
+    suspend fun countOn(date: LocalDate): Int =
+        busiestDays.firstOrNull { it.first == date }?.second
+            ?: seriesRepository.busiestDays(limit = Int.MAX_VALUE).firstOrNull { it.first == date }?.second
+            ?: 0
+
+    fun markDayAsCatchUp(date: LocalDate) = runBusy {
+        val count = seriesRepository.markDayAsCatchUp(date)
+        message = "$count Folgen vom ${date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))} als nachgetragen markiert ✓"
+        busiestDays = seriesRepository.busiestDays()
     }
 
     fun setNotifications(enabled: Boolean) {

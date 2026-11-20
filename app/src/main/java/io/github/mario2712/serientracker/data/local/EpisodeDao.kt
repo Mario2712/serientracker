@@ -54,9 +54,25 @@ interface EpisodeDao {
     @Query("DELETE FROM episodes WHERE seasonId = :seasonId AND number > :maxNumber")
     suspend fun deleteEpisodesAbove(seasonId: Long, maxNumber: Int)
 
-    /** Ticking by hand: the timestamp is exact, so the imported flag is cleared. */
-    @Query("UPDATE episodes SET watchedAt = :watchedAt, watchedAtImported = 0 WHERE id = :episodeId")
-    suspend fun setWatched(episodeId: Long, watchedAt: Long?)
+    /**
+     * Ticking by hand. [imported] = true means "watched earlier, no exact date" (catch-up mode);
+     * such episodes are left out of the daily statistics.
+     */
+    @Query("UPDATE episodes SET watchedAt = :watchedAt, watchedAtImported = :imported WHERE id = :episodeId")
+    suspend fun setWatched(episodeId: Long, watchedAt: Long?, imported: Boolean = false)
+
+    /** All real (exact) watch moments, for finding catch-up days. */
+    @Query("SELECT watchedAt FROM episodes WHERE watchedAt IS NOT NULL AND watchedAtImported = 0")
+    suspend fun realWatchTimes(): List<Long>
+
+    /** Marks the real watch moments in [from]..[to] as "watched earlier"; returns how many. */
+    @Query(
+        """
+        UPDATE episodes SET watchedAtImported = 1
+        WHERE watchedAt IS NOT NULL AND watchedAt BETWEEN :from AND :to AND watchedAtImported = 0
+        """,
+    )
+    suspend fun markRangeImported(from: Long, to: Long): Int
 
     @Query("UPDATE episodes SET rating = :rating WHERE id = :episodeId")
     suspend fun setRating(episodeId: Long, rating: Int?)
@@ -67,23 +83,23 @@ interface EpisodeDao {
     /** Ticks the unwatched, counting episodes of a season; already watched ones keep their date. */
     @Query(
         """
-        UPDATE episodes SET watchedAt = :watchedAt, watchedAtImported = 0
+        UPDATE episodes SET watchedAt = :watchedAt, watchedAtImported = :imported
         WHERE seasonId = :seasonId AND watchedAt IS NULL AND kind != 'HIDDEN'
         """,
     )
-    suspend fun markSeasonWatched(seasonId: Long, watchedAt: Long)
+    suspend fun markSeasonWatched(seasonId: Long, watchedAt: Long, imported: Boolean = false)
 
     @Query("UPDATE episodes SET watchedAt = NULL, watchedAtImported = 0 WHERE seasonId = :seasonId")
     suspend fun clearSeasonWatched(seasonId: Long)
 
     @Query(
         """
-        UPDATE episodes SET watchedAt = :watchedAt, watchedAtImported = 0
+        UPDATE episodes SET watchedAt = :watchedAt, watchedAtImported = :imported
         WHERE watchedAt IS NULL AND kind != 'HIDDEN'
             AND seasonId IN (SELECT id FROM seasons WHERE seriesId = :seriesId)
         """,
     )
-    suspend fun markAllWatched(seriesId: Long, watchedAt: Long)
+    suspend fun markAllWatched(seriesId: Long, watchedAt: Long, imported: Boolean = false)
 
     @Query(
         """

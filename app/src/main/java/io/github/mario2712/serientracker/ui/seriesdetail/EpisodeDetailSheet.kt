@@ -293,7 +293,7 @@ private fun watchedText(episode: EpisodeEntity): String {
     val at = episode.watchedAt ?: return "noch nicht gesehen"
     val zoned = Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault())
     return if (episode.watchedAtImported) {
-        "vor dem TMDB-Abgleich (lt. Excel ca. ${zoned.toLocalDate().format(dateFormat)})"
+        "früher gesehen (ohne genaues Datum, erfasst am ${zoned.toLocalDate().format(dateFormat)})"
     } else {
         "am ${zoned.format(dateTimeFormat)}"
     }

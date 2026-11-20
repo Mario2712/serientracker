@@ -13,15 +13,39 @@ import io.github.mario2712.serientracker.data.local.SeriesWithSeasons
 import io.github.mario2712.serientracker.domain.Progress
 import io.github.mario2712.serientracker.domain.WatchStatus
 import kotlinx.coroutines.flow.Flow
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * Single entry point for the UI to read and change data.
  * Later sources (TMDB, Excel import, backup) plug in here, not in the ViewModels.
  */
-class SeriesRepository(private val db: AppDatabase) {
+class SeriesRepository(
+    private val db: AppDatabase,
+    /** Catch-up mode: ticks count as "watched earlier" and stay out of the daily statistics. */
+    private val catchUpMode: suspend () -> Boolean = { false },
+) {
 
     private val seriesDao = db.seriesDao()
     private val episodeDao = db.episodeDao()
+
+    /** Days with the most real ticks (newest first among equals), to find catch-up days. */
+    suspend fun busiestDays(limit: Int = 5, zone: ZoneId = ZoneId.systemDefault()): List<Pair<LocalDate, Int>> =
+        episodeDao.realWatchTimes()
+            .groupingBy { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
+            .eachCount()
+            .entries
+            .sortedWith(compareByDescending<Map.Entry<LocalDate, Int>> { it.value }.thenByDescending { it.key })
+            .take(limit)
+            .map { it.key to it.value }
+
+    /** Real ticks of [date] become "watched earlier"; returns how many episodes were changed. */
+    suspend fun markDayAsCatchUp(date: LocalDate, zone: ZoneId = ZoneId.systemDefault()): Int {
+        val from = date.atStartOfDay(zone).toInstant().toEpochMilli()
+        val to = date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1
+        return episodeDao.markRangeImported(from, to)
+    }
 
     fun observeOverview(): Flow<List<SeriesOverview>> = seriesDao.observeOverview()
 
@@ -55,20 +79,20 @@ class SeriesRepository(private val db: AppDatabase) {
         // Matched series get their seasons from TMDB; the form only edits the others.
         if (series.tmdbId == null) syncSeasons(id, episodesPerSeason)
         // A manually chosen status wins on save; "Fertig" means everything has been seen.
-        if (series.status == WatchStatus.COMPLETED) episodeDao.markAllWatched(id, now)
+        if (series.status == WatchStatus.COMPLETED) episodeDao.markAllWatched(id, now, catchUpMode())
         id
     }
 
     suspend fun delete(seriesId: Long) = seriesDao.delete(seriesId)
 
     suspend fun setEpisodeWatched(seriesId: Long, episodeId: Long, watched: Boolean) = db.withTransaction {
-        episodeDao.setWatched(episodeId, if (watched) System.currentTimeMillis() else null)
+        episodeDao.setWatched(episodeId, if (watched) System.currentTimeMillis() else null, watched && catchUpMode())
         afterProgressChange(seriesId, if (watched) Progress.Change.WATCHED else Progress.Change.UNWATCHED)
     }
 
     suspend fun setSeasonWatched(seriesId: Long, seasonId: Long, watched: Boolean) = db.withTransaction {
         if (watched) {
-            episodeDao.markSeasonWatched(seasonId, System.currentTimeMillis())
+            episodeDao.markSeasonWatched(seasonId, System.currentTimeMillis(), catchUpMode())
         } else {
             episodeDao.clearSeasonWatched(seasonId)
         }
@@ -86,7 +110,7 @@ class SeriesRepository(private val db: AppDatabase) {
         episodeDao.setRating(episodeId, rating?.coerceIn(1, 10))
         val episode = episodeDao.getEpisode(episodeId)
         if (rating != null && episode != null && episode.watchedAt == null) {
-            episodeDao.setWatched(episodeId, System.currentTimeMillis())
+            episodeDao.setWatched(episodeId, System.currentTimeMillis(), catchUpMode())
             afterProgressChange(seriesId, Progress.Change.WATCHED)
         }
     }
@@ -101,7 +125,7 @@ class SeriesRepository(private val db: AppDatabase) {
     suspend fun countAndWatch(seriesId: Long, episodeId: Long, seasonNumber: Int) = db.withTransaction {
         episodeDao.setKind(episodeId, if (seasonNumber == 0) EpisodeKind.SPECIAL else EpisodeKind.REGULAR)
         if (episodeDao.getEpisode(episodeId)?.watchedAt == null) {
-            episodeDao.setWatched(episodeId, System.currentTimeMillis())
+            episodeDao.setWatched(episodeId, System.currentTimeMillis(), catchUpMode())
         }
         afterProgressChange(seriesId, Progress.Change.WATCHED)
     }
@@ -119,6 +143,7 @@ class SeriesRepository(private val db: AppDatabase) {
                     title = title.trim().ifEmpty { "Special" },
                     airDate = airDate,
                     watchedAt = if (watched) System.currentTimeMillis() else null,
+                    watchedAtImported = watched && catchUpMode(),
                     kind = EpisodeKind.SPECIAL,
                     isCustom = true,
                 ),
@@ -135,7 +160,7 @@ class SeriesRepository(private val db: AppDatabase) {
     /** Marks the first unwatched episode as watched. Returns false if there is none. */
     suspend fun watchNextEpisode(seriesId: Long): Boolean = db.withTransaction {
         val next = episodeDao.nextUnwatched(seriesId) ?: return@withTransaction false
-        episodeDao.setWatched(next.id, System.currentTimeMillis())
+        episodeDao.setWatched(next.id, System.currentTimeMillis(), catchUpMode())
         afterProgressChange(seriesId, Progress.Change.WATCHED)
         true
     }
