@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.mario2712.serientracker.data.local.SeriesWithSeasons
 import io.github.mario2712.serientracker.data.repository.SeriesRepository
 import io.github.mario2712.serientracker.data.repository.TmdbSyncRepository
+import io.github.mario2712.serientracker.data.settings.SettingsRepository
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -28,7 +29,12 @@ class SeriesDetailViewModel(
     savedStateHandle: SavedStateHandle,
     private val repository: SeriesRepository,
     private val syncRepository: TmdbSyncRepository,
+    settings: SettingsRepository,
 ) : ViewModel() {
+
+    /** Excel differences and Excel details can be switched off in the settings. */
+    val showExcel: StateFlow<Boolean> = settings.showExcelComparisons
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
     /** Feedback for "Von TMDB aktualisieren". */
     var message by mutableStateOf<String?>(null)

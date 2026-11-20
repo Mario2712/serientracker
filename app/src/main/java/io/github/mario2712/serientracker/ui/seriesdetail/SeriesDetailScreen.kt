@@ -78,6 +78,7 @@ fun SeriesDetailScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     var selectedEpisodeId by rememberSaveable { mutableStateOf<Long?>(null) }
     var addSpecial by rememberSaveable { mutableStateOf(false) }
+    val showExcel by viewModel.showExcel.collectAsStateWithLifecycle()
     val title = (state as? SeriesDetailUiState.Loaded)?.data?.series?.title.orEmpty()
 
     Scaffold(
@@ -117,6 +118,7 @@ fun SeriesDetailScreen(
                 is SeriesDetailUiState.Loaded -> DetailContent(
                     data = s.data,
                     message = viewModel.message,
+                    showExcel = showExcel,
                     onMatch = { onMatch(viewModel.seriesId) },
                     onWatchNext = viewModel::watchNext,
                     onToggleEpisode = viewModel::toggleEpisode,
@@ -187,6 +189,7 @@ fun SeriesDetailScreen(
 private fun DetailContent(
     data: SeriesWithSeasons,
     message: String?,
+    showExcel: Boolean,
     onMatch: () -> Unit,
     onWatchNext: () -> Unit,
     onToggleEpisode: (Long, Boolean) -> Unit,
@@ -206,14 +209,14 @@ private fun DetailContent(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Header(data = data, watched = watched, total = all.size, message = message)
+            Header(data = data, watched = watched, total = all.size, message = message, showExcel = showExcel)
         }
         val s = data.series
         if (s.overview != null || s.tmdbRating != null || s.castSummary != null || s.trailerKey != null) {
             item { AboutCard(data) }
         }
         data.importProgress?.let { ip ->
-            item { ExcelCard(ip, onMatch) }
+            item { ExcelCard(ip, onMatch, showExcel) }
         }
         if (next != null) {
             item {
@@ -271,7 +274,7 @@ private fun DetailContent(
 }
 
 @Composable
-private fun Header(data: SeriesWithSeasons, watched: Int, total: Int, message: String?) {
+private fun Header(data: SeriesWithSeasons, watched: Int, total: Int, message: String?, showExcel: Boolean) {
     val series = data.series
     val rated = data.seasons.flatMap { it.episodes }.filter { it.counts }.mapNotNull { it.rating }
     Column {
@@ -317,7 +320,7 @@ private fun Header(data: SeriesWithSeasons, watched: Int, total: Int, message: S
             LinearProgressIndicator(progress = { Progress.fraction(watched, total) }, modifier = Modifier.fillMaxWidth())
         }
         // Differences to the Excel list (e.g. TMDB lists an extra special).
-        val excelDiffers = data.importProgress == null && total > 0 &&
+        val excelDiffers = showExcel && data.importProgress == null && total > 0 &&
             (series.excelTotal != null || series.excelWatched != null) &&
             (series.excelTotal != total || series.excelWatched != watched)
         if (excelDiffers) {
@@ -386,9 +389,16 @@ private fun AboutCard(data: SeriesWithSeasons) {
 }
 
 @Composable
-private fun ExcelCard(ip: ImportProgressEntity, onMatch: () -> Unit) {
+private fun ExcelCard(ip: ImportProgressEntity, onMatch: () -> Unit, showExcel: Boolean) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (!showExcel) {
+                // Excel details switched off: only what matters for the app.
+                Text("Noch nicht mit TMDB abgeglichen", style = MaterialTheme.typography.titleMedium)
+                Text("Die genaue Folgenliste kommt von TMDB.", style = MaterialTheme.typography.bodySmall)
+                Button(onClick = onMatch) { Text("Mit TMDB abgleichen") }
+                return@Column
+            }
             Text("Stand aus der Excel", style = MaterialTheme.typography.titleMedium)
             val lastSeason = ip.lastSeason
             val lastEpisode = ip.lastEpisode

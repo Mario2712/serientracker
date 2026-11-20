@@ -31,6 +31,8 @@ Erste stabile Version des Serientrackers.
 ### Daten
 - Excel-Export `serienliste_yyyymmdd.xlsx` im Format der ursprünglichen Liste (+ Spalte Originaltitel, Blatt „Info“).
 - Archiv als JSON exportieren und wiederherstellen; automatisches wöchentliches Backup in einen Ordner deiner Wahl.
+- „Excel-Vergleiche anzeigen“ lässt sich in den Einstellungen ausschalten, sobald nur noch die App genutzt wird
+  (blendet Abweichungen, Excel-Stand und „Auf Excel-Stand zurücksetzen“ aus; der Excel-Export bleibt).
 
 ### Hinweise
 - Für den TMDB-Abgleich braucht die App einen kostenlosen TMDB-API-Key (Einstellungen).

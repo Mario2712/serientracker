@@ -50,6 +50,11 @@ import io.github.mario2712.serientracker.data.stats.DelayStats
 import io.github.mario2712.serientracker.data.stats.Heatmap
 import io.github.mario2712.serientracker.data.stats.RatingComparison
 import io.github.mario2712.serientracker.data.stats.YearReview
+import io.github.mario2712.serientracker.data.settings.SettingsRepository
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import io.github.mario2712.serientracker.data.stats.RatedItem
 import io.github.mario2712.serientracker.data.stats.Stats
 import io.github.mario2712.serientracker.data.stats.StatsRepository
@@ -59,7 +64,13 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.coroutines.cancellation.CancellationException
 
-class StatsViewModel(private val repository: StatsRepository) : ViewModel() {
+class StatsViewModel(
+    private val repository: StatsRepository,
+    settings: SettingsRepository,
+) : ViewModel() {
+    val showExcel: StateFlow<Boolean> = settings.showExcelComparisons
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
     var stats by mutableStateOf<Stats?>(null)
         private set
     var loading by mutableStateOf(false)
@@ -98,6 +109,7 @@ fun StatsScreen(
 ) {
     // Recompute whenever the screen is opened (data may have changed in the meantime).
     LaunchedEffect(Unit) { viewModel.load() }
+    val showExcel by viewModel.showExcel.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -119,7 +131,7 @@ fun StatsScreen(
         val stats = viewModel.stats
         Box(Modifier.padding(padding).fillMaxSize()) {
             when {
-                stats != null -> StatsContent(stats, onOpenSeries)
+                stats != null -> StatsContent(stats, showExcel, onOpenSeries)
                 viewModel.error != null -> Text(viewModel.error!!, Modifier.padding(16.dp))
                 else -> CircularProgressIndicator(Modifier.align(Alignment.Center))
             }
@@ -128,7 +140,7 @@ fun StatsScreen(
 }
 
 @Composable
-private fun StatsContent(s: Stats, onOpenSeries: (Long) -> Unit) {
+private fun StatsContent(s: Stats, showExcel: Boolean, onOpenSeries: (Long) -> Unit) {
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -192,7 +204,7 @@ private fun StatsContent(s: Stats, onOpenSeries: (Long) -> Unit) {
                 Bars(s.pileOfShame, unit = "offen", onClick = onOpenSeries)
             }
         }
-        item {
+        if (showExcel) item {
             Section("Abweichungen zur Excel (${s.deviations.size})") {
                 if (s.deviations.isEmpty()) {
                     Hint("Keine: alle abgeglichenen Serien passen zur Excel.")

@@ -22,12 +22,12 @@ object AppViewModelProvider {
     val Factory = viewModelFactory {
         initializer { SeriesListViewModel(c().seriesRepository, c().settings) }
         initializer {
-            SeriesDetailViewModel(createSavedStateHandle(), c().seriesRepository, c().tmdbSyncRepository)
+            SeriesDetailViewModel(createSavedStateHandle(), c().seriesRepository, c().tmdbSyncRepository, c().settings)
         }
         initializer {
             EditSeriesViewModel(createSavedStateHandle(), c().seriesRepository, c().tmdbSyncRepository)
         }
-        initializer { SyncViewModel(c().tmdbSyncCoordinator, c().tmdbSyncRepository) }
+        initializer { SyncViewModel(c().tmdbSyncCoordinator, c().tmdbSyncRepository, c().settings) }
         initializer {
             MatchSeriesViewModel(
                 createSavedStateHandle(),
@@ -49,7 +49,7 @@ object AppViewModelProvider {
             )
         }
         initializer { AboutViewModel(c().appVersion, c().seriesRepository) }
-        initializer { StatsViewModel(c().statsRepository) }
+        initializer { StatsViewModel(c().statsRepository, c().settings) }
         initializer { UpcomingViewModel(c().upcomingRepository, c().seriesRepository, c().settings) }
     }
 }

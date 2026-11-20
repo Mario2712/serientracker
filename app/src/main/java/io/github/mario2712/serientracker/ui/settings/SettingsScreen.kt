@@ -91,6 +91,7 @@ fun SettingsScreen(
     ) { granted -> viewModel.setNotifications(granted) }
     val context = LocalContext.current
     val background by viewModel.background.collectAsStateWithLifecycle()
+    val showExcel by viewModel.showExcel.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -206,8 +207,20 @@ fun SettingsScreen(
 
             HorizontalDivider()
             Text("Daten", style = MaterialTheme.typography.titleMedium)
-            OutlinedButton(onClick = { confirmReset = true }, enabled = !viewModel.busy) {
-                Text("Auf Excel-Stand zurücksetzen")
+            SwitchRow(
+                text = "Excel-Vergleiche anzeigen",
+                checked = showExcel,
+                onChange = viewModel::setShowExcel,
+            )
+            Text(
+                "Zeigt Abweichungen zur ursprünglichen Excel-Liste und den Excel-Stand noch nicht abgeglichener Serien. " +
+                    "Ausschalten, sobald du nur noch die App verwendest. Der Excel-Export bleibt verfügbar.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (showExcel) {
+                OutlinedButton(onClick = { confirmReset = true }, enabled = !viewModel.busy) {
+                    Text("Auf Excel-Stand zurücksetzen")
+                }
             }
         }
     }
