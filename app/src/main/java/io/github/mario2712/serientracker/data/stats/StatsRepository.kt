@@ -10,6 +10,7 @@ class StatsRepository(private val db: AppDatabase) {
     /** Loads everything (~20,000 episodes) and computes the statistics off the main thread. */
     suspend fun load(today: LocalDate = LocalDate.now()): Stats {
         val all = db.seriesDao().getAllWithSeasons()
-        return withContext(Dispatchers.Default) { StatsCalculator.compute(all, today) }
+        val views = db.episodeViewDao().getAll().groupBy { it.episodeId }
+        return withContext(Dispatchers.Default) { StatsCalculator.compute(all, today, extraViews = views) }
     }
 }

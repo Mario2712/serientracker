@@ -85,6 +85,18 @@ fun MatchSeriesScreen(
             }
         }
     }
+
+    viewModel.pendingPick?.let { (result, other) ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = viewModel::cancelPick,
+            title = { Text("Schon verknüpft") },
+            text = { Text("„${result.name}“ ist bereits mit „$other“ verknüpft. Trotzdem auch diesen Eintrag damit verknüpfen?") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.pick(result, onDone, confirmed = true) }) { Text("Verknüpfen") }
+            },
+            dismissButton = { TextButton(onClick = viewModel::cancelPick) { Text("Abbrechen") } },
+        )
+    }
 }
 
 @Composable

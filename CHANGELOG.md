@@ -3,6 +3,22 @@
 Neue Version: `version.txt` anheben und hier einen Abschnitt `## x.y.z` ergänzen.
 Nach dem Merge auf `main` erstellt CI daraus automatisch das Release `vx.y.z` mit APK.
 
+## 1.2.0
+
+- **Doppelte Serien:** Beim Anlegen fragt die App nach, wenn es die Serie schon gibt (gleiche TMDB-Serie oder
+  gleicher Titel): „Vorhandene öffnen“, „Trotzdem neu anlegen“ oder „Abbrechen“. Neu angelegt wird mit allen
+  Staffeln, Folgen und Infos des vorhandenen Eintrags, aber ohne Fortschritt.
+- **Zusatzname** (z. B. „Rewatch 2026“ oder „Mario alleine“) unterscheidet doppelte Einträge in Liste, Detail,
+  Suche und Excel-Export. In „Demnächst“ und bei Benachrichtigungen erscheint dieselbe Serie nur einmal.
+- **„Als neuen Durchgang anlegen“** im Menü einer Serie, z. B. für einen gemeinsamen Rewatch.
+- **Mehrfach gesehen:** Im Folgen-Detailfenster gibt es „Nochmal gesehen“ und die Liste aller Sichtungen mit Datum
+  (ändern, löschen); die Kachel zeigt „2×“; „Staffel nochmal gesehen“ in der Staffelkarte.
+  Sehzeit, Verlauf, Binge, Heatmap und Jahresrückblick zählen jede Sichtung, Fortschritt und Excel jede Folge einmal.
+  Neue Statistik „Meistgesehene Folgen“.
+- **Zeitzone pro Eintrag:** Beim Abhaken wird die Zeitzone mitgespeichert. Uhrzeiten und Statistiken zeigen die
+  Ortszeit zum Zeitpunkt des Schauens, auch wenn du später auf Reisen nachsiehst. Bisherige Einträge gelten als
+  Europe/Vienna. Eintragen funktioniert in jeder Zeitzone.
+
 ## 1.1.0
 
 - **Nachtragen-Modus** (Menü der Serienliste oder Einstellungen): Solange er an ist, zählt Abhaken als „früher gesehen“.

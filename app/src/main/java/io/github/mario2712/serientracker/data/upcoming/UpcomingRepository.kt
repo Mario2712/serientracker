@@ -3,6 +3,7 @@ package io.github.mario2712.serientracker.data.upcoming
 import io.github.mario2712.serientracker.data.local.AppDatabase
 import io.github.mario2712.serientracker.data.local.SeriesWithSeasons
 import io.github.mario2712.serientracker.data.local.counts
+import io.github.mario2712.serientracker.data.local.displayTitle
 import io.github.mario2712.serientracker.data.local.isWatched
 import io.github.mario2712.serientracker.domain.EpisodeKind
 import io.github.mario2712.serientracker.domain.Progress
@@ -62,7 +63,8 @@ object Upcoming {
                 .minWithOrNull(compareBy({ it.first }, { it.second.number }))
             NewlyAiredItem(
                 seriesId = data.series.id,
-                title = data.series.title,
+                // Each entry has its own progress, so duplicates stay separate (with their extra name).
+                title = data.series.displayTitle,
                 posterUrl = data.series.posterUrl,
                 unwatched = recent.size,
                 latestAirDate = LocalDate.ofEpochDay(recent.maxOf { it.second.airDate!! }),
@@ -70,12 +72,14 @@ object Upcoming {
             )
         }.sortedByDescending { it.latestAirDate }
 
-        val items = relevant.mapNotNull { data ->
+        // Announced episodes are the same for duplicates of a show: list each show once.
+        val items = relevant.groupBy { it.series.tmdbId }.values.mapNotNull { group ->
+            val data = group.first()
             val s = data.series
             val date = s.nextAirDate?.let(LocalDate::ofEpochDay)?.takeIf { !it.isBefore(today) } ?: return@mapNotNull null
             UpcomingItem(
                 seriesId = s.id,
-                title = s.title,
+                title = if (group.size > 1) "${s.title} (${group.size} Einträge)" else s.title,
                 posterUrl = s.posterUrl,
                 date = date,
                 code = if (s.nextEpisodeSeason != null && s.nextEpisodeNumber != null) {

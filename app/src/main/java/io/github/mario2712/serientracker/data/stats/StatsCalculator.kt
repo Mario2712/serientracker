@@ -1,9 +1,12 @@
 package io.github.mario2712.serientracker.data.stats
 
 import io.github.mario2712.serientracker.data.local.EpisodeEntity
+import io.github.mario2712.serientracker.data.local.EpisodeViewEntity
 import io.github.mario2712.serientracker.data.local.SeriesWithSeasons
 import io.github.mario2712.serientracker.data.local.counts
 import io.github.mario2712.serientracker.data.local.isWatched
+import io.github.mario2712.serientracker.data.local.zone
+import io.github.mario2712.serientracker.data.local.zoneOf
 import io.github.mario2712.serientracker.domain.Progress
 import io.github.mario2712.serientracker.domain.WatchStatus
 import java.time.Instant
@@ -56,6 +59,8 @@ data class Stats(
     val pileOfShame: List<Bar>,
     val deviations: List<Deviation>,
     val extras: ExtraStats,
+    /** Episodes watched at least twice. */
+    val mostWatchedEpisodes: List<Bar> = emptyList(),
 )
 
 /** All statistics, computed from the full data set. Pure function; unit-tested. */
@@ -65,7 +70,20 @@ object StatsCalculator {
     const val MIN_RATED_EPISODES_FOR_SERIES = 2
     private const val TOP = 10
 
-    fun compute(all: List<SeriesWithSeasons>, today: LocalDate, zone: ZoneId = ZoneId.systemDefault()): Stats {
+    /** Year label for viewings without an exact date (Excel import, catch-up mode). */
+    const val NO_DATE = "ohne genaues Datum"
+
+    /**
+     * @param extraViews further viewings per episode id (rewatches); they count for watch time and the
+     *   time based statistics, while "watched episodes" and progress count each episode once.
+     * Each viewing is evaluated in the time zone where it was ticked; [zone] is only the fallback for "today".
+     */
+    fun compute(
+        all: List<SeriesWithSeasons>,
+        today: LocalDate,
+        @Suppress("UNUSED_PARAMETER") zone: ZoneId = ZoneId.systemDefault(),
+        extraViews: Map<Long, List<EpisodeViewEntity>> = emptyMap(),
+    ): Stats {
         val genreEpisodes = mutableMapOf<String, Int>()
         val genreMinutes = mutableMapOf<String, Double>()
         val watcherSeries = mutableMapOf<String, Int>()
@@ -96,13 +114,17 @@ object StatsCalculator {
             for (ep in episodes.filter { it.isWatched }) {
                 withEpisodeData++
                 if (ep.runtime != null) withRuntime++
+                val extras = extraViews[ep.id].orEmpty()
+                // Every viewing in its own zone; null date = no exact date.
+                val viewings = listOf(if (ep.watchedAtImported) null else localDate(ep.watchedAt!!, ep.zone)) +
+                    extras.map { v -> if (v.imported) null else localDate(v.watchedAt, zoneOf(v.zoneId)) }
+                viewings.filterNotNull().forEach { realWatches += data to it }
                 val m = (ep.runtime ?: median)?.toDouble() ?: continue
-                minutes += m
-                val year = if (ep.watchedAtImported) "vor dem Abgleich" else localDate(ep.watchedAt!!, zone).year.toString()
-                yearMinutes.merge(year, m, Double::plus)
+                viewings.forEach { day ->
+                    minutes += m
+                    yearMinutes.merge(day?.year?.toString() ?: NO_DATE, m, Double::plus)
+                }
             }
-            episodes.filter { it.isWatched && !it.watchedAtImported }
-                .forEach { realWatches += data to localDate(it.watchedAt!!, zone) }
             minutesTotal += minutes
             if (minutes > 0) seriesMinutes += Bar(s.title, minutes / 60, seriesId = s.id)
 
@@ -187,9 +209,25 @@ object StatsCalculator {
                 .map { Bar(it.key.label, it.value.toDouble()) }.sortedByDescending { it.value },
             pileOfShame = pile.sortedByDescending { it.value }.take(TOP),
             deviations = deviations.sortedBy { it.title.lowercase() },
-            extras = StatsExtrasCalculator.compute(all, zone),
+            mostWatchedEpisodes = mostWatched(all, extraViews),
+            extras = StatsExtrasCalculator.compute(all, extraViews),
         )
     }
+
+    /** Episodes seen at least twice, most viewings first. */
+    private fun mostWatched(all: List<SeriesWithSeasons>, extraViews: Map<Long, List<EpisodeViewEntity>>): List<Bar> =
+        all.flatMap { data ->
+            data.seasons.flatMap { season ->
+                season.episodes.filter { it.isWatched && extraViews[it.id].orEmpty().isNotEmpty() }.map { ep ->
+                    Bar(
+                        label = "${data.series.title} · ${Progress.episodeCode(season.season.number, ep.number)}",
+                        value = 1.0 + extraViews.getValue(ep.id).size,
+                        detail = ep.title.orEmpty(),
+                        seriesId = data.series.id,
+                    )
+                }
+            }
+        }.sortedByDescending { it.value }.take(TOP)
 
     /** "Drama, Krimi" → [Drama, Krimi]. */
     fun genres(genre: String?): List<String> =

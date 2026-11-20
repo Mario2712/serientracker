@@ -12,6 +12,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlin.coroutines.cancellation.CancellationException
 import io.github.mario2712.serientracker.domain.EpisodeKind
+import io.github.mario2712.serientracker.domain.Watcher
+import io.github.mario2712.serientracker.data.local.EpisodeViewEntity
+import kotlinx.coroutines.flow.Flow
 import io.github.mario2712.serientracker.ui.navigation.Routes
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -78,6 +81,35 @@ class SeriesDetailViewModel(
     val uiState: StateFlow<SeriesDetailUiState> = repository.observeSeries(seriesId)
         .map { if (it == null) SeriesDetailUiState.NotFound else SeriesDetailUiState.Loaded(sorted(it)) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SeriesDetailUiState.Loading)
+
+    /** Episode id → number of further viewings, for the "2×" badges. */
+    val rewatchCounts: StateFlow<Map<Long, Int>> = repository.observeRewatchCounts(seriesId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    /** Further viewings of one episode (for the episode sheet). */
+    fun views(episodeId: Long): Flow<List<EpisodeViewEntity>> = repository.observeViews(episodeId)
+
+    fun watchAgain(episodeId: Long) {
+        viewModelScope.launch { repository.watchAgain(seriesId, episodeId) }
+    }
+
+    fun watchSeasonAgain(seasonId: Long) {
+        viewModelScope.launch { repository.watchSeasonAgain(seriesId, seasonId) }
+    }
+
+    /** [viewId] null = first viewing. */
+    fun deleteViewing(episodeId: Long, viewId: Long?) {
+        viewModelScope.launch { repository.deleteViewing(seriesId, episodeId, viewId) }
+    }
+
+    fun setViewingTime(episodeId: Long, viewId: Long?, watchedAt: Long, zone: String) {
+        viewModelScope.launch { repository.setViewingTime(seriesId, episodeId, viewId, watchedAt, zone) }
+    }
+
+    /** New entry for the same show (rewatch, someone watching alone) without progress. */
+    fun duplicate(watcher: Watcher?, label: String?, onCreated: (Long) -> Unit) {
+        viewModelScope.launch { onCreated(repository.duplicateSeries(seriesId, watcher, label)) }
+    }
 
     fun setWatchedAt(episodeId: Long, watchedAt: Long) {
         viewModelScope.launch { repository.setEpisodeWatchedAt(seriesId, episodeId, watchedAt) }

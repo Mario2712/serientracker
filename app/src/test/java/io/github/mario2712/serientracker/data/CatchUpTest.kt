@@ -85,14 +85,15 @@ class CatchUpTest {
         listOf(1, 2, 3, 4).forEach { db.episodeDao().setWatched(episode(it).id, at(day, 10 + it)) }
         db.episodeDao().setWatched(episode(5).id, at(day.minusDays(1), 21))
 
-        assertEquals(listOf(day to 4, day.minusDays(1) to 1), repo.busiestDays(zone = zone))
+        // Stored with the home zone (Europe/Vienna): 11–14 h UTC is still the same day there.
+        assertEquals(listOf(day to 4, day.minusDays(1) to 1), repo.busiestDays())
 
-        val changed = repo.markDayAsCatchUp(day, zone)
+        val changed = repo.markDayAsCatchUp(day)
 
         assertEquals(4, changed)
         assertTrue((1..4).all { n -> db.episodeDao().getEpisodes(seasonId).first { it.number == n }.watchedAtImported })
         assertFalse(episode(5).watchedAtImported)
-        assertEquals(listOf(day.minusDays(1) to 1), repo.busiestDays(zone = zone))
+        assertEquals(listOf(day.minusDays(1) to 1), repo.busiestDays())
 
         val stats = StatsCalculator.compute(db.seriesDao().getAllWithSeasons(), day, zone)
         assertEquals(1, stats.longestBinge!!.episodes)

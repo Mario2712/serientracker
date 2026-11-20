@@ -64,6 +64,7 @@ class SeriesListViewModel(
                 .filter {
                     f.query.isBlank() ||
                         it.series.title.contains(f.query.trim(), ignoreCase = true) ||
+                        it.series.label?.contains(f.query.trim(), ignoreCase = true) == true ||
                         it.series.originalTitle?.contains(f.query.trim(), ignoreCase = true) == true
                 }
             SeriesListUiState(

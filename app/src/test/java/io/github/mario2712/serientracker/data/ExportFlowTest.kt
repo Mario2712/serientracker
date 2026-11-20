@@ -121,7 +121,7 @@ class ExportFlowTest {
     }
 
     @Test
-    fun `migration 2 to 5 keeps data, flags imported watches and marks specials`() {
+    fun `migration 2 to 7 keeps data, flags imported watches, marks specials and sets zones`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val name = "migration-test.db"
         context.deleteDatabase(name)
@@ -150,6 +150,14 @@ class ExportFlowTest {
                 episodes,
             )
             assertEquals(2, sql.query("SELECT COUNT(*) FROM series").use { it.moveToFirst(); it.getInt(0) })
+            // v7: watched episodes got the home zone, unwatched ones none; the views table exists.
+            assertEquals(
+                listOf("Europe/Vienna", "Europe/Vienna", null, null),
+                sql.query("SELECT watchedZone FROM episodes ORDER BY id").use { c ->
+                    buildList { while (c.moveToNext()) add(if (c.isNull(0)) null else c.getString(0)) }
+                },
+            )
+            assertEquals(0, sql.query("SELECT COUNT(*) FROM episode_views").use { it.moveToFirst(); it.getInt(0) })
             // Excel counts of not yet matched series are copied from import_progress.
             sql.query("SELECT excelWatched, excelTotal FROM series WHERE id = 2").use {
                 it.moveToFirst()

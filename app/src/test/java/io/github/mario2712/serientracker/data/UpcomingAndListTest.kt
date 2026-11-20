@@ -35,7 +35,7 @@ class UpcomingAndListTest {
     private val today = LocalDate.of(2026, 11, 20)
     private fun day(d: LocalDate) = d.toEpochDay()
 
-    private fun series(id: Long, status: WatchStatus, next: LocalDate?, tmdb: Int? = 1, episodes: List<EpisodeEntity> = emptyList()) =
+    private fun series(id: Long, status: WatchStatus, next: LocalDate?, tmdb: Int? = id.toInt(), episodes: List<EpisodeEntity> = emptyList()) =
         SeriesWithSeasons(
             series = SeriesEntity(
                 id = id, title = "S$id", status = status, tmdbId = tmdb, nextAirDate = next?.let(::day),
@@ -66,6 +66,16 @@ class UpcomingAndListTest {
         assertEquals(listOf(2L), sections["Diese Woche"]) // Sunday 22.11. is still this week
         assertEquals(listOf(3L), sections["Diesen Monat"]) // 30.11.
         assertEquals(listOf(6L), sections["Später"])
+    }
+
+    @Test
+    fun `duplicates of a show are listed once in upcoming`() {
+        val data = Upcoming.compute(
+            listOf(series(1, WatchStatus.WATCHING, today, tmdb = 99), series(2, WatchStatus.CAUGHT_UP, today, tmdb = 99)),
+            today,
+        )
+        val item = data.upcoming.single().second.single()
+        assertEquals("S1 (2 Einträge)", item.title)
     }
 
     @Test

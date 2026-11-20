@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.mario2712.serientracker.data.local.displayTitle
 import io.github.mario2712.serientracker.data.remote.TmdbKeyMissingException
 import io.github.mario2712.serientracker.data.remote.TmdbSearchResult
 import io.github.mario2712.serientracker.data.repository.SeriesRepository
@@ -53,8 +54,20 @@ class MatchSeriesViewModel(
         }
     }
 
-    fun pick(result: TmdbSearchResult, onDone: () -> Unit) {
+    /** A pick whose TMDB show is already linked to another entry: waits for confirmation. */
+    var pendingPick by mutableStateOf<Pair<TmdbSearchResult, String>?>(null)
+        private set
+
+    fun pick(result: TmdbSearchResult, onDone: () -> Unit, confirmed: Boolean = false) {
         viewModelScope.launch {
+            if (!confirmed) {
+                val other = seriesRepository.findDuplicates(result.id, "", excludeId = seriesId).firstOrNull { it.tmdbId == result.id }
+                if (other != null) {
+                    pendingPick = result to other.displayTitle
+                    return@launch
+                }
+            }
+            pendingPick = null
             guarded {
                 val report = syncRepository.link(seriesId, result.id)
                 coordinator.resolved(seriesId, report)
@@ -62,6 +75,8 @@ class MatchSeriesViewModel(
             }
         }
     }
+
+    fun cancelPick() { pendingPick = null }
 
     /** Keep the series without TMDB data (e.g. not listed there). */
     fun skip(onDone: () -> Unit) {

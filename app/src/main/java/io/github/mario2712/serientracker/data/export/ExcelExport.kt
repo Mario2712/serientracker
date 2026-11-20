@@ -39,7 +39,8 @@ object ExcelExport {
         val base = ExcelRow(
             status = status,
             finished = finished,
-            title = s.title,
+            // Duplicates keep their own row; the extra name tells them apart.
+            title = s.label?.takeIf { it.isNotBlank() }?.let { "${s.title} ($it)" } ?: s.title,
             originalTitle = s.originalTitle,
             who = s.watcher?.excelCode,
             genre = s.genre,

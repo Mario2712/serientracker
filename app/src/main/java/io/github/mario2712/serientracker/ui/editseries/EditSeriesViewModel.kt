@@ -22,6 +22,8 @@ data class EditSeriesForm(
     val watcher: Watcher? = null,
     val genre: String = "",
     val originalTitle: String = "",
+    /** Extra name to tell duplicates apart (e.g. "Rewatch 2026"). */
+    val label: String = "",
     val rating: Int? = null,
     val notes: String = "",
     /** Episode count per season as typed, index 0 = season 1. */
@@ -73,6 +75,7 @@ class EditSeriesViewModel(
                         watcher = s.watcher,
                         genre = s.genre.orEmpty(),
                         originalTitle = s.originalTitle.orEmpty(),
+                        label = s.label.orEmpty(),
                         rating = s.rating,
                         notes = s.notes.orEmpty(),
                         seasons = counts.map { it.toString() }.ifEmpty { listOf("") },
@@ -117,12 +120,48 @@ class EditSeriesViewModel(
         it.copy(seasons = it.seasons.toMutableList().also { list -> list[index] = digits })
     }
 
+    /** Existing series that look like the new one (with their progress text); non-null shows the dialog. */
+    var duplicates by mutableStateOf<List<Pair<SeriesEntity, String>>?>(null)
+        private set
+
+    fun dismissDuplicates() { duplicates = null }
+
+    /**
+     * Saves. A new series is first checked against existing ones (same TMDB show or title);
+     * if there are any, the user is asked ([duplicates]) and [createAnyway] continues.
+     */
     fun save(onSaved: (Long) -> Unit) {
         val f = form
-        if (!f.isValid) return
+        if (!f.isValid || isSaving) return
+        if (!isNew) return doSave(onSaved)
+        viewModelScope.launch {
+            val found = repository.findDuplicates(f.tmdbPick?.id, f.title.trim(), f.originalTitle.trim().ifEmpty { null })
+            if (found.isEmpty()) doSave(onSaved) else duplicates = found.map { it to repository.progressText(it.id) }
+        }
+    }
+
+    /** New entry although the show exists: copies seasons and info of a matched duplicate, no progress. */
+    fun createAnyway(onSaved: (Long) -> Unit) {
+        val f = form
+        val source = duplicates?.map { it.first }?.firstOrNull {
+            it.tmdbId != null && (f.tmdbPick == null || f.tmdbPick.id == it.tmdbId)
+        }
+        duplicates = null
+        if (source == null) return doSave(onSaved)
+        viewModelScope.launch {
+            isSaving = true
+            val id = repository.duplicateSeries(source.id, f.watcher, f.label, f.status)
+            isSaving = false
+            onSaved(id)
+        }
+    }
+
+    private fun doSave(onSaved: (Long) -> Unit) {
+        val f = form
         val base = original ?: SeriesEntity(title = f.title)
         val entity = base.copy(
             title = f.title.trim(),
+            label = f.label.trim().ifEmpty { null },
             status = f.status,
             watcher = f.watcher,
             genre = f.genre.trim().ifEmpty { null },
@@ -132,7 +171,6 @@ class EditSeriesViewModel(
         )
         // Trailing empty season fields are ignored; empty fields in between count as 0 episodes.
         val counts = f.seasons.map { it.toIntOrNull() ?: 0 }.dropLastWhile { it == 0 }
-        if (isSaving) return
         viewModelScope.launch {
             isSaving = true
             val id = repository.save(entity, if (f.tmdbPick != null) emptyList() else counts)
