@@ -4,8 +4,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -75,7 +81,11 @@ fun DuplicateWarningDialog(
         onDismissRequest = onDismiss,
         title = { Text("Serie schon vorhanden") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            // Three actions do not fit into the dialog's button row: they are stacked full width here.
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
                 existing.forEach { (s, progress) ->
                     Text(
                         "„${s.displayTitle}“ (Wer: ${s.watcher?.label ?: "–"} · ${s.status.label} · $progress)",
@@ -87,14 +97,18 @@ fun DuplicateWarningDialog(
                         "Infos und Folgen werden vom vorhandenen Eintrag übernommen, der Fortschritt startet leer.",
                     style = MaterialTheme.typography.bodySmall,
                 )
+                Spacer(Modifier.height(8.dp))
+                FilledTonalButton(onClick = { onOpen(existing.first().first.id) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Vorhandene öffnen")
+                }
+                OutlinedButton(onClick = onCreateAnyway, modifier = Modifier.fillMaxWidth()) {
+                    Text("Trotzdem neu anlegen")
+                }
+                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                    Text("Abbrechen")
+                }
             }
         },
-        confirmButton = { TextButton(onClick = onCreateAnyway) { Text("Trotzdem neu anlegen") } },
-        dismissButton = {
-            Column {
-                TextButton(onClick = { onOpen(existing.first().first.id) }) { Text("Vorhandene öffnen") }
-                TextButton(onClick = onDismiss) { Text("Abbrechen") }
-            }
-        },
+        confirmButton = {},
     )
 }

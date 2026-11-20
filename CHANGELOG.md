@@ -3,6 +3,11 @@
 Neue Version: `version.txt` anheben und hier einen Abschnitt `## x.y.z` ergänzen.
 Nach dem Merge auf `main` erstellt CI daraus automatisch das Release `vx.y.z` mit APK.
 
+## 1.2.1
+
+- Rückfrage „Serie schon vorhanden“: Die drei Buttons („Vorhandene öffnen“, „Trotzdem neu anlegen“, „Abbrechen“)
+  stehen jetzt untereinander in voller Breite und sind nicht mehr abgeschnitten.
+
 ## 1.2.0
 
 - **Doppelte Serien:** Beim Anlegen fragt die App nach, wenn es die Serie schon gibt (gleiche TMDB-Serie oder
