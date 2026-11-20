@@ -24,6 +24,8 @@ data class SyncReport(
     val excelTotal: Int?,
     val watched: Int,
     val total: Int,
+    /** Episodes added by a refresh of an already linked show, e.g. "S05E09 „Titel“" (for notifications). */
+    val newEpisodes: List<String> = emptyList(),
 ) {
     /** Excel and TMDB disagree; worth a look by the user. */
     val hasDifference: Boolean
@@ -86,12 +88,21 @@ class TmdbSyncRepository(
         val synced = seriesDao.getSynced()
         var withNew = 0
         synced.forEachIndexed { i, s ->
-            val before = episodeDao.countEpisodes(s.id)
-            runCatching { refresh(s.id) }.getOrNull()?.let { if (it.total > before) withNew++ }
+            runCatching { refresh(s.id) }.getOrNull()?.let { if (it.newEpisodes.isNotEmpty()) withNew++ }
             onProgress(i + 1, synced.size)
         }
         return withNew
     }
+
+    /**
+     * Daily background check: refreshes the matched series that can get new episodes
+     * ([WatchStatus.ALERT_STATUSES]) and returns the reports that contain new episodes.
+     */
+    suspend fun checkForNewEpisodes(): List<SyncReport> =
+        seriesDao.getSynced()
+            .filter { it.status in WatchStatus.ALERT_STATUSES }
+            .mapNotNull { s -> runCatching { refresh(s.id) }.getOrNull() }
+            .filter { it.newEpisodes.isNotEmpty() }
 
     /**
      * Stores the TMDB seasons and episodes. Existing episodes keep their watched state.
@@ -106,6 +117,7 @@ class TmdbSyncRepository(
 
         // Specials (season 0) only for series that track them: TMDB often lists lots of extras.
         val tracksSpecials = (progress?.maxSpecial ?: 0) > 0 || existingSeasons.containsKey(0)
+        val added = mutableListOf<String>()
 
         for (season in show.seasons) {
             if (season.number == 0 && !tracksSpecials) continue
@@ -143,6 +155,12 @@ class TmdbSyncRepository(
                 )
             }
             episodeDao.insertEpisodes(newEpisodes)
+            // Only a refresh of an already linked show reports "new" episodes (not the first match).
+            if (series.tmdbId == show.id && progress == null) {
+                newEpisodes.forEach { ep ->
+                    added += Progress.episodeCode(season.number, ep.number) + (ep.title?.let { " „$it“" } ?: "")
+                }
+            }
             season.episodes.forEach { ep ->
                 existing[ep.number]?.let {
                     episodeDao.setEpisodeInfo(it.id, ep.title, ep.airDate.toEpochDay(), ep.runtime)
@@ -182,12 +200,21 @@ class TmdbSyncRepository(
                 excelTotal = series.excelTotal ?: progress?.total,
                 posterUrl = show.posterUrl ?: series.posterUrl,
                 isEnded = show.isEnded,
-                nextAirDate = show.nextAirDate.toEpochDay() ?: series.nextAirDate,
+                // TMDB knows the next announced episode; without one the old (Excel) date is obsolete.
+                nextAirDate = show.nextAirDate.toEpochDay(),
+                nextEpisodeSeason = show.nextEpisodeSeason,
+                nextEpisodeNumber = show.nextEpisodeNumber,
+                nextEpisodeName = show.nextEpisodeName,
+                overview = show.overview ?: series.overview,
+                tmdbRating = show.voteAverage ?: series.tmdbRating,
+                tmdbVoteCount = show.voteCount ?: series.tmdbVoteCount,
+                trailerKey = show.trailerKey ?: series.trailerKey,
+                castSummary = show.castSummary ?: series.castSummary,
                 infoUpdatedAt = LocalDate.now().toEpochDay(),
                 status = status,
             ),
         )
-        SyncReport(seriesId, newTitle, progress?.watched, progress?.total, watched, total)
+        SyncReport(seriesId, newTitle, progress?.watched, progress?.total, watched, total, added)
     }
 
     private fun String?.toEpochDay(): Long? =

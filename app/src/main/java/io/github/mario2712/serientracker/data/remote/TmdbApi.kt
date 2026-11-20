@@ -23,5 +23,7 @@ interface TmdbApi {
         @Path("id") id: Int,
         @Query("append_to_response") append: String? = null,
         @Query("language") language: String = "de-DE",
+        /** Languages for appended videos (otherwise only German ones, which are rare). */
+        @Query("include_video_language") videoLanguages: String? = null,
     ): JsonObject
 }

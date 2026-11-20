@@ -24,6 +24,9 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -205,6 +208,10 @@ private fun DetailContent(
         item {
             Header(data = data, watched = watched, total = all.size, message = message)
         }
+        val s = data.series
+        if (s.overview != null || s.tmdbRating != null || s.castSummary != null || s.trailerKey != null) {
+            item { AboutCard(data) }
+        }
         data.importProgress?.let { ip ->
             item { ExcelCard(ip, onMatch) }
         }
@@ -293,7 +300,12 @@ private fun Header(data: SeriesWithSeasons, watched: Int, total: Int, message: S
                 )
                 if (facts.isNotEmpty()) Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
                 series.nextAirDate?.let {
-                    Text("Nächste Ausstrahlung: ${formatDate(it)}", style = MaterialTheme.typography.bodyMedium)
+                    val code = if (series.nextEpisodeSeason != null && series.nextEpisodeNumber != null) {
+                        " · " + Progress.episodeCode(series.nextEpisodeSeason, series.nextEpisodeNumber)
+                    } else {
+                        ""
+                    }
+                    Text("Nächste Ausstrahlung: ${formatDate(it)}$code", style = MaterialTheme.typography.bodyMedium)
                 }
                 if (series.isEnded == true) Text("Serie beendet", style = MaterialTheme.typography.bodySmall)
             }
@@ -324,6 +336,51 @@ private fun Header(data: SeriesWithSeasons, watched: Int, total: Int, message: S
         series.notes?.takeIf { it.isNotBlank() }?.let {
             Spacer(Modifier.height(12.dp))
             Text(it, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+/** TMDB info: description, score, cast, trailer. */
+@Composable
+private fun AboutCard(data: SeriesWithSeasons) {
+    val s = data.series
+    val uriHandler = LocalUriHandler.current
+    var expanded by rememberSaveable(s.id) { mutableStateOf(false) }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Über die Serie", style = MaterialTheme.typography.titleMedium)
+            s.tmdbRating?.let { score ->
+                val votes = s.tmdbVoteCount?.let { " (%,d Stimmen)".format(java.util.Locale.GERMANY, it) }.orEmpty()
+                Text("TMDB ★ %.1f%s".format(java.util.Locale.GERMANY, score, votes), style = MaterialTheme.typography.bodyMedium)
+            }
+            s.overview?.let { text ->
+                Text(
+                    text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = if (expanded) Int.MAX_VALUE else 4,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.clickable { expanded = !expanded },
+                )
+                if (!expanded && text.length > 200) {
+                    TextButton(onClick = { expanded = true }) { Text("Mehr anzeigen") }
+                }
+            }
+            s.castSummary?.let {
+                Text("Besetzung", style = MaterialTheme.typography.labelLarge)
+                Text(it, style = MaterialTheme.typography.bodySmall)
+            }
+            s.trailerKey?.let { key ->
+                OutlinedButton(onClick = { uriHandler.openUri("https://www.youtube.com/watch?v=$key") }) {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Trailer ansehen")
+                }
+            }
+            Text(
+                "Daten von TMDB",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

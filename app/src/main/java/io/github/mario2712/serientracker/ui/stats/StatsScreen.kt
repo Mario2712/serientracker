@@ -41,8 +41,15 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.runtime.saveable.rememberSaveable
 import io.github.mario2712.serientracker.data.stats.Bar
 import io.github.mario2712.serientracker.data.stats.DayRecord
+import io.github.mario2712.serientracker.data.stats.DelayStats
+import io.github.mario2712.serientracker.data.stats.Heatmap
+import io.github.mario2712.serientracker.data.stats.RatingComparison
+import io.github.mario2712.serientracker.data.stats.YearReview
 import io.github.mario2712.serientracker.data.stats.RatedItem
 import io.github.mario2712.serientracker.data.stats.Stats
 import io.github.mario2712.serientracker.data.stats.StatsRepository
@@ -175,6 +182,10 @@ private fun StatsContent(s: Stats, onOpenSeries: (Long) -> Unit) {
                 Bars(s.watcherEpisodes, unit = "")
             }
         }
+        item { YearReviewSection(s.extras.years, onOpenSeries) }
+        item { RatingComparisonSection(s.extras.ratingComparison, onOpenSeries) }
+        item { DelaySection(s.extras.delay, onOpenSeries) }
+        item { HeatmapSection(s.extras.heatmap) }
         item { Section("Status") { Bars(s.statusCounts, unit = "") } }
         item {
             Section("Stapel der Schande") {
@@ -205,6 +216,122 @@ private fun StatsContent(s: Stats, onOpenSeries: (Long) -> Unit) {
 }
 
 private fun dayText(d: DayRecord) = "${d.date.format(dayFormat)} · ${d.episodes} Folgen"
+
+@Composable
+private fun YearReviewSection(years: List<YearReview>, onOpenSeries: (Long) -> Unit) {
+    var index by rememberSaveable { mutableStateOf(0) }
+    Section("Jahresrückblick") {
+        if (years.isEmpty()) {
+            Hint("Sobald du Folgen in der App abhakst, entsteht hier dein Jahresrückblick.")
+            return@Section
+        }
+        val review = years[index.coerceIn(0, years.lastIndex)]
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { index++ }, enabled = index < years.lastIndex) {
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Vorjahr")
+            }
+            Text(review.year.toString(), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+            IconButton(onClick = { index-- }, enabled = index > 0) {
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Folgejahr")
+            }
+        }
+        KeyValue("Gesehene Folgen", review.episodes.toString())
+        KeyValue("Sehzeit", "${review.hours.fmt()} Stunden")
+        review.topGenre?.let { KeyValue("Top-Genre", it) }
+        review.binge?.let { KeyValue("Binge des Jahres", "${it.title}: ${dayText(it)}") }
+        review.bestEpisode?.let { KeyValue("Beste Folge", "${it.title} (★ ${it.rating.fmt()})") }
+        Text("Meistgeschaute Serien", style = MaterialTheme.typography.labelLarge)
+        Bars(review.topSeries, unit = "Folgen", onClick = onOpenSeries)
+    }
+}
+
+@Composable
+private fun RatingComparisonSection(c: RatingComparison, onOpenSeries: (Long) -> Unit) {
+    Section("Ich vs. TMDB") {
+        val diff = c.avgDifference
+        if (diff == null) {
+            Hint("Bewerte Serien oder mindestens 2 Folgen einer abgeglichenen Serie, dann erscheint der Vergleich.")
+            return@Section
+        }
+        val verdict = when {
+            diff < -0.2 -> "Du bewertest im Schnitt ${(-diff).fmt(1)} Punkte strenger als TMDB."
+            diff > 0.2 -> "Du bewertest im Schnitt ${diff.fmt(1)} Punkte großzügiger als TMDB."
+            else -> "Du liegst im Schnitt gleichauf mit TMDB."
+        }
+        Text(verdict, style = MaterialTheme.typography.bodyMedium)
+        Hint("Verglichen: ${c.compared} Serien (eigene Bewertung, sonst Ø der Folgen).")
+        if (c.stricter.isNotEmpty()) {
+            Text("Strenger als TMDB", style = MaterialTheme.typography.labelLarge)
+            c.stricter.forEach { DiffRow(it, onOpenSeries) }
+        }
+        if (c.moreGenerous.isNotEmpty()) {
+            Text("Großzügiger als TMDB", style = MaterialTheme.typography.labelLarge)
+            c.moreGenerous.forEach { DiffRow(it, onOpenSeries) }
+        }
+    }
+}
+
+@Composable
+private fun DiffRow(item: RatedItem, onOpenSeries: (Long) -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable { onOpenSeries(item.seriesId) }.padding(vertical = 2.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text(item.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Hint(item.subtitle)
+        }
+        Text((if (item.rating > 0) "+" else "") + item.rating.fmt(1), style = MaterialTheme.typography.titleSmall)
+    }
+}
+
+@Composable
+private fun DelaySection(d: DelayStats, onOpenSeries: (Long) -> Unit) {
+    Section("Wie aktuell schaust du?") {
+        val avg = d.avgDays
+        if (avg == null) {
+            Hint("Noch keine Folgen mit Ausstrahlungsdatum und echtem Abhak-Zeitpunkt.")
+            return@Section
+        }
+        KeyValue("Ø Tage nach Ausstrahlung", avg.fmt())
+        d.medianDays?.let { KeyValue("Median", "$it Tage") }
+        KeyValue("Am Ausstrahlungstag geschaut", "${d.sameDay} von ${d.counted}")
+        if (d.fastest.isNotEmpty()) {
+            Text("Am schnellsten (Ø Tage)", style = MaterialTheme.typography.labelLarge)
+            Bars(d.fastest, unit = "Tage", onClick = onOpenSeries)
+            Text("Am spätesten (Ø Tage)", style = MaterialTheme.typography.labelLarge)
+            Bars(d.slowest, unit = "Tage", onClick = onOpenSeries)
+        }
+    }
+}
+
+@Composable
+private fun HeatmapSection(h: Heatmap) {
+    Section("Wann schaust du?") {
+        if (h.max == 0) {
+            Hint("Noch keine Folgen mit echtem Abhak-Zeitpunkt.")
+            return@Section
+        }
+        h.bestWeekday?.let { KeyValue("Beliebtester Tag", it) }
+        h.bestBlock?.let { KeyValue("Beliebteste Zeit", it) }
+        Row {
+            Spacer(Modifier.width(32.dp))
+            Heatmap.BLOCKS.forEach {
+                Text(it, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f), maxLines = 1)
+            }
+        }
+        h.cells.forEachIndexed { day, row ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(Heatmap.WEEKDAYS[day], style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(32.dp))
+                row.forEach { count ->
+                    val alpha = if (count == 0) 0.06f else 0.2f + 0.8f * count / h.max
+                    Box(
+                        Modifier.weight(1f).height(22.dp).padding(1.dp).clip(RoundedCornerShape(3.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = alpha)),
+                    )
+                }
+            }
+        }
+        Hint("Nur echte Abhak-Zeitpunkte. Dunkler = mehr Folgen.")
+    }
+}
 
 @Composable
 private fun Section(title: String, content: @Composable () -> Unit) {

@@ -38,6 +38,30 @@ import io.github.mario2712.serientracker.data.export.BackupRepository
 import io.github.mario2712.serientracker.data.export.ExportRepository
 import io.github.mario2712.serientracker.data.remote.Tmdb
 import io.github.mario2712.serientracker.ui.AppViewModelProvider
+import io.github.mario2712.serientracker.work.AutoBackup
+import io.github.mario2712.serientracker.work.Notifications
+import android.Manifest
+import android.os.Build
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.Switch
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
+private fun formatDateTime(millis: Long?): String? = millis?.let {
+    Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd.MM.yyyy, HH:mm"))
+}
+
+@Composable
+private fun SwitchRow(text: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,6 +82,15 @@ fun SettingsScreen(
     val restoreLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> restoreUri = uri }
+    val folderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri -> uri?.let(viewModel::setBackupFolder) }
+    // Android 13+: ask for the notification permission when switching notifications on.
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted -> viewModel.setNotifications(granted) }
+    val context = LocalContext.current
+    val background by viewModel.background.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -96,6 +129,59 @@ fun SettingsScreen(
             Button(onClick = viewModel::saveAndCheckKey, enabled = !viewModel.busy) { Text("Speichern & prüfen") }
             OutlinedButton(onClick = viewModel::refreshAll, enabled = !viewModel.busy) {
                 Text("Alle abgeglichenen Serien aktualisieren")
+            }
+
+            HorizontalDivider()
+            Text("Neue Folgen", style = MaterialTheme.typography.titleMedium)
+            SwitchRow(
+                text = "Bei neuen Folgen benachrichtigen",
+                checked = background.notificationsEnabled,
+                onChange = { on ->
+                    val needsPermission = on && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        !Notifications.canNotify(context)
+                    if (needsPermission) {
+                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        viewModel.setNotifications(on)
+                    }
+                },
+            )
+            Text(
+                "Täglich gegen 8 Uhr prüft die App bei TMDB, ob es neue Folgen gibt: für laufende, pausierte, " +
+                    "aufgeholte und fertige Serien (nicht für abgebrochene oder geplante). " +
+                    "Zuletzt geprüft: ${formatDateTime(background.lastCheckAt) ?: "noch nie"}.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            OutlinedButton(onClick = viewModel::checkNow, enabled = !viewModel.busy) { Text("Jetzt prüfen") }
+
+            HorizontalDivider()
+            Text("Automatisches Backup", style = MaterialTheme.typography.titleMedium)
+            SwitchRow(
+                text = "Wöchentlich sichern",
+                checked = background.backupEnabled && background.backupFolder != null,
+                onChange = { on ->
+                    if (on && background.backupFolder == null) folderLauncher.launch(null) else viewModel.setAutoBackup(on)
+                },
+            )
+            Text(
+                listOfNotNull(
+                    "Legt jede Woche ein Archiv in einem Ordner deiner Wahl ab (z. B. Downloads oder Google Drive); " +
+                        "die letzten ${AutoBackup.KEEP} bleiben erhalten.",
+                    background.backupFolder?.let { "Ordner: ${Uri.parse(it).lastPathSegment ?: it}" },
+                    "Letztes Backup: ${formatDateTime(background.lastBackupAt) ?: "noch keines"}.",
+                ).joinToString("\n"),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            background.lastBackupError?.let {
+                Text("Fehler beim letzten Backup: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { folderLauncher.launch(null) }) {
+                    Text(if (background.backupFolder == null) "Ordner wählen" else "Ordner ändern")
+                }
+                OutlinedButton(onClick = viewModel::backupNow, enabled = background.backupFolder != null) {
+                    Text("Jetzt sichern")
+                }
             }
 
             HorizontalDivider()

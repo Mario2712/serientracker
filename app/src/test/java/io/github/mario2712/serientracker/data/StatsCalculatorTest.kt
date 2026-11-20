@@ -124,6 +124,51 @@ class StatsCalculatorTest {
     }
 
     @Test
+    fun `year review uses only real watch dates`() {
+        val years = stats.extras.years
+        assertEquals(listOf(2026), years.map { it.year }) // Community was only imported
+        val y = years.single()
+        assertEquals(3, y.episodes)
+        assertEquals(1.5, y.hours, 0.001)
+        assertEquals("Drama", y.topGenre)
+        assertEquals(9.0, y.bestEpisode!!.rating, 0.0)
+        assertEquals(3, y.binge!!.episodes)
+    }
+
+    @Test
+    fun `own rating compared with tmdb`() {
+        val withTmdb = listOf(
+            data[0].copy(series = data[0].series.copy(tmdbRating = 9.0)), // mine Ø 8.0 → -1
+            data[1].copy(series = data[1].series.copy(tmdbRating = 5.0)), // mine 6 → +1
+        )
+        val c = StatsCalculator.compute(withTmdb, today, zone).extras.ratingComparison
+        assertEquals(2, c.compared)
+        assertEquals(0.0, c.avgDifference!!, 0.001)
+        assertEquals("Dark", c.stricter.single().title)
+        assertEquals("Community", c.moreGenerous.single().title)
+    }
+
+    @Test
+    fun `delay and heatmap`() {
+        val aired = data[0].let { d ->
+            d.copy(
+                seasons = d.seasons.map { s ->
+                    s.copy(episodes = s.episodes.map { it.copy(airDate = LocalDate.of(2026, 10, 30).toEpochDay()) })
+                },
+            )
+        }
+        val e = StatsCalculator.compute(listOf(aired), today, zone).extras
+        assertEquals(3, e.delay.counted)
+        assertEquals(2.0, e.delay.avgDays!!, 0.001) // 30.10. → 1.11.
+        assertEquals(0, e.delay.sameDay)
+        assertEquals("Dark", e.delay.fastest.single().label)
+        // 1.11.2026 is a Sunday; 20–22 h → block 5.
+        assertEquals(3, e.heatmap.cells[6][5])
+        assertEquals("Sonntag", e.heatmap.bestWeekday)
+        assertEquals("20–24 Uhr", e.heatmap.bestBlock)
+    }
+
+    @Test
     fun `genre text is split on comma and slash`() {
         assertEquals(listOf("Sci-Fi & Fantasy", "Drama"), StatsCalculator.genres("Sci-Fi & Fantasy, Drama"))
         assertEquals(listOf("Action", "Mystery"), StatsCalculator.genres("Action/ Mystery"))

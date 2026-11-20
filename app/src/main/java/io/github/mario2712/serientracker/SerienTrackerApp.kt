@@ -13,6 +13,9 @@ import io.github.mario2712.serientracker.data.repository.TmdbSyncCoordinator
 import io.github.mario2712.serientracker.data.repository.TmdbSyncRepository
 import io.github.mario2712.serientracker.data.seed.SeedImporter
 import io.github.mario2712.serientracker.data.settings.SettingsRepository
+import io.github.mario2712.serientracker.data.upcoming.UpcomingRepository
+import io.github.mario2712.serientracker.work.Notifications
+import io.github.mario2712.serientracker.work.WorkScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,11 +28,18 @@ class SerienTrackerApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        Notifications.createChannels(this)
         container.appScope.launch {
             runCatching { container.seedImporter.importIfNeeded() }
                 .onFailure { Log.e("SerienTracker", "Excel-Startdaten konnten nicht geladen werden", it) }
             runCatching { container.seedImporter.backfillExcelCounts() }
                 .onFailure { Log.e("SerienTracker", "Excel-Vergleichswerte konnten nicht nachgetragen werden", it) }
+            // Re-register the background jobs (KEEP: does nothing if they are already scheduled).
+            runCatching {
+                val bg = container.settings.currentBackground()
+                container.workScheduler.setNewEpisodeCheck(bg.notificationsEnabled)
+                container.workScheduler.setAutoBackup(bg.backupEnabled && bg.backupFolder != null)
+            }.onFailure { Log.w("SerienTracker", "Hintergrund-Jobs nicht geplant", it) }
         }
     }
 }
@@ -49,6 +59,8 @@ class AppContainer(app: Application) {
     val exportRepository: ExportRepository by lazy { ExportRepository(database, appVersion) }
     val backupRepository: BackupRepository by lazy { BackupRepository(database, appVersion) }
     val statsRepository: StatsRepository by lazy { StatsRepository(database) }
+    val upcomingRepository: UpcomingRepository by lazy { UpcomingRepository(database) }
+    val workScheduler: WorkScheduler by lazy { WorkScheduler(app) }
     val settings: SettingsRepository by lazy { SettingsRepository(app) }
     val seriesRepository: SeriesRepository by lazy { SeriesRepository(database) }
     val tmdbClient: TmdbClient by lazy { TmdbClient { settings.currentTmdbApiKey() } }

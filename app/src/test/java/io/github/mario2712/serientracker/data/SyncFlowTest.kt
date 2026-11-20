@@ -226,6 +226,33 @@ class SyncFlowTest {
         assertEquals(50, report.total)
         assertEquals(2, report.watched)
         assertEquals("Zeitreise", db.seriesDao().getSeries(monkeys.id)!!.genre)
+        // The refresh reports the new episodes (for the notification) and stores TMDB info.
+        assertEquals(listOf("S04E12 „Folge 12“", "S04E13 „Folge 13“", "S04E14 „Folge 14“"), report.newEpisodes)
+        val s = db.seriesDao().getSeries(monkeys.id)!!
+        assertEquals("Beschreibung von 12 Monkeys", s.overview)
+        assertEquals(7.9, s.tmdbRating!!, 0.001)
+        assertEquals("yt100", s.trailerKey)
+        assertEquals("Darsteller als Figur", s.castSummary)
+    }
+
+    @Test
+    fun `background check only for series that can get new episodes`() = runTest {
+        importer().importIfNeeded()
+        val sync = TmdbSyncRepository(db, fake)
+        val monkeys = db.seriesDao().getAll().first { it.title == "12 Monkeys" }
+        val mirror = db.seriesDao().getAll().first { it.title == "Black Mirror" }
+        sync.link(monkeys.id, 100)
+        sync.link(mirror.id, 200)
+        // Dropped series are not checked.
+        db.seriesDao().update(db.seriesDao().getSeries(mirror.id)!!.copy(status = WatchStatus.DROPPED))
+        fake.extraEpisodes = 2
+
+        val reports = sync.checkForNewEpisodes()
+
+        assertEquals(listOf(monkeys.id), reports.map { it.seriesId })
+        assertEquals(2, reports.single().newEpisodes.size)
+        // The first link reports nothing as "new".
+        assertTrue(sync.link(db.seriesDao().getAll().first { it.title == "24" }.id, 300).newEpisodes.isEmpty())
     }
 
     @Test
@@ -281,6 +308,11 @@ class SyncFlowTest {
             posterUrl = null,
             nextAirDate = null,
             genres = listOf("Sci-Fi & Fantasy", "Drama"),
+            overview = "Beschreibung von $name",
+            voteAverage = 7.9,
+            voteCount = 1234,
+            trailerKey = "yt$id",
+            castSummary = "Darsteller als Figur",
             seasons = buildList {
                 if (specials > 0) add(TmdbSeason(0, "Specials", episodes(specials)))
                 perSeason.forEachIndexed { i, n -> add(TmdbSeason(i + 1, null, episodes(n))) }

@@ -25,13 +25,15 @@ interface SeriesDao {
                 ORDER BY se.number, e.number LIMIT 1) AS nextEpisode,
             ip.lastSeason AS excelSeason,
             ip.lastEpisode AS excelEpisode,
-            (ip.seriesId IS NOT NULL) AS needsSync
+            (ip.seriesId IS NOT NULL) AS needsSync,
+            ep.avgRating AS avgEpisodeRating
         FROM series s
         LEFT JOIN import_progress ip ON ip.seriesId = s.id
         LEFT JOIN (
             SELECT se.seriesId AS seriesId,
                 COUNT(*) AS total,
-                SUM(CASE WHEN e.watchedAt IS NOT NULL THEN 1 ELSE 0 END) AS watched
+                SUM(CASE WHEN e.watchedAt IS NOT NULL THEN 1 ELSE 0 END) AS watched,
+                AVG(e.rating) AS avgRating
             FROM episodes e JOIN seasons se ON e.seasonId = se.id
             WHERE e.kind != 'HIDDEN'
             GROUP BY se.seriesId

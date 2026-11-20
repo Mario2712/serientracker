@@ -41,6 +41,18 @@ data class SeriesEntity(
     /** Excel "gesehen"/"von" at import, kept after the TMDB match to show differences. */
     val excelWatched: Int? = null,
     val excelTotal: Int? = null,
+    /** Next episode announced by TMDB (date in [nextAirDate]). */
+    val nextEpisodeSeason: Int? = null,
+    val nextEpisodeNumber: Int? = null,
+    val nextEpisodeName: String? = null,
+    /** TMDB info, refreshed with every sync. */
+    val overview: String? = null,
+    val tmdbRating: Double? = null,
+    val tmdbVoteCount: Int? = null,
+    /** YouTube video key of the trailer. */
+    val trailerKey: String? = null,
+    /** Top cast as "Name als Rolle, …". */
+    val castSummary: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
 )
@@ -167,4 +179,6 @@ data class SeriesOverview(
     val excelSeason: Int?,
     val excelEpisode: Int?,
     val needsSync: Boolean,
+    /** Average of the rated (counting) episodes, null if none is rated. */
+    val avgEpisodeRating: Double? = null,
 )

@@ -1,6 +1,7 @@
 package io.github.mario2712.serientracker.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -14,6 +15,7 @@ import io.github.mario2712.serientracker.ui.settings.SettingsScreen
 import io.github.mario2712.serientracker.ui.stats.StatsScreen
 import io.github.mario2712.serientracker.ui.tmdbsync.MatchSeriesScreen
 import io.github.mario2712.serientracker.ui.tmdbsync.SyncScreen
+import io.github.mario2712.serientracker.ui.upcoming.UpcomingScreen
 
 object Routes {
     const val ARG_SERIES_ID = "seriesId"
@@ -25,15 +27,20 @@ object Routes {
     const val SETTINGS = "settings"
     const val ABOUT = "about"
     const val STATS = "stats"
+    const val UPCOMING = "upcoming"
 
     fun detail(id: Long) = "series/detail/$id"
     fun match(id: Long) = "sync/match/$id"
     fun edit(id: Long? = null) = if (id == null) "series/edit" else "series/edit?$ARG_SERIES_ID=$id"
 }
 
+/** [openSeriesId]: open this series right away (tap on a new-episode notification). */
 @Composable
-fun AppNavHost() {
+fun AppNavHost(openSeriesId: Long? = null) {
     val nav = rememberNavController()
+    LaunchedEffect(openSeriesId) {
+        if (openSeriesId != null && openSeriesId > 0) nav.navigate(Routes.detail(openSeriesId))
+    }
     NavHost(navController = nav, startDestination = Routes.LIST) {
         composable(Routes.LIST) {
             SeriesListScreen(
@@ -43,6 +50,13 @@ fun AppNavHost() {
                 onSettingsClick = { nav.navigate(Routes.SETTINGS) },
                 onAboutClick = { nav.navigate(Routes.ABOUT) },
                 onStatsClick = { nav.navigate(Routes.STATS) },
+                onUpcomingClick = { nav.navigate(Routes.UPCOMING) },
+            )
+        }
+        composable(Routes.UPCOMING) {
+            UpcomingScreen(
+                onBack = { nav.popBackStack() },
+                onOpenSeries = { nav.navigate(Routes.detail(it)) },
             )
         }
         composable(

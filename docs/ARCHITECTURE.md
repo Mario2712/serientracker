@@ -166,6 +166,19 @@ Mit einzelnen Folgen kann man Lücken abbilden (eine Folge übersprungen), eine 
   `episodes.runtime`, `series.tmdbMetaVersion`, `series.excelWatched/excelTotal`.
   Für schon abgeglichene Serien trägt `SeedImporter.backfillExcelCounts()` die Excel-Werte per Titel aus `serien.json` nach.
 
+- v5 → v6: `series.nextEpisodeSeason/Number/Name`, `overview`, `tmdbRating`, `tmdbVoteCount`, `trailerKey`, `castSummary`.
+
+## Hintergrund-Jobs (WorkManager, `work/`)
+- `NewEpisodesWorker`: täglich (~8 Uhr, nur mit Netz). `TmdbSyncRepository.checkForNewEpisodes()` aktualisiert
+  abgeglichene Serien mit Status in `WatchStatus.ALERT_STATUSES` (nicht abgebrochen/geplant) und meldet neue Folgen
+  als Sammel-Benachrichtigung; bei genau einer Serie öffnet das Antippen deren Detailansicht.
+- `BackupWorker`: wöchentlich ein Archiv in den per Storage Access Framework gewählten Ordner; die letzten 5 bleiben.
+- `WorkScheduler` plant/entfernt die Jobs (beim Umschalten in den Einstellungen und beim App-Start, Policy KEEP).
+
+## Demnächst
+`data/upcoming/Upcoming.compute()` (rein, getestet): „Neu erschienen“ = ungesehene Folgen der letzten 14 Tage;
+„Demnächst“ = TMDB `next_episode_to_air` ab heute, gruppiert nach Heute / Diese Woche / Diesen Monat / Später.
+
 ## Folgen-Typen & Specials
 - `HIDDEN` zählt nirgends (Fortschritt, Status, Excel, Statistik). „Nächste Folge“ nimmt nur `REGULAR`.
 - Abgleich: alle TMDB-Specials zählen (`SPECIAL`). Gesehen sind beim ersten Abgleich die ersten `lastSpecial`

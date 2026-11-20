@@ -15,11 +15,12 @@ import io.github.mario2712.serientracker.ui.settings.SettingsViewModel
 import io.github.mario2712.serientracker.ui.stats.StatsViewModel
 import io.github.mario2712.serientracker.ui.tmdbsync.MatchSeriesViewModel
 import io.github.mario2712.serientracker.ui.tmdbsync.SyncViewModel
+import io.github.mario2712.serientracker.ui.upcoming.UpcomingViewModel
 
 /** Builds every ViewModel with its dependencies from the [AppContainer]. */
 object AppViewModelProvider {
     val Factory = viewModelFactory {
-        initializer { SeriesListViewModel(c().seriesRepository) }
+        initializer { SeriesListViewModel(c().seriesRepository, c().settings) }
         initializer {
             SeriesDetailViewModel(createSavedStateHandle(), c().seriesRepository, c().tmdbSyncRepository)
         }
@@ -44,10 +45,12 @@ object AppViewModelProvider {
                 exportRepository = c().exportRepository,
                 backupRepository = c().backupRepository,
                 contentResolver = c().contentResolver,
+                workScheduler = c().workScheduler,
             )
         }
         initializer { AboutViewModel(c().appVersion, c().seriesRepository) }
         initializer { StatsViewModel(c().statsRepository) }
+        initializer { UpcomingViewModel(c().upcomingRepository, c().seriesRepository, c().settings) }
     }
 }
 

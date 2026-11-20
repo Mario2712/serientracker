@@ -17,11 +17,14 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -66,6 +69,7 @@ fun SeriesListScreen(
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
     onStatsClick: () -> Unit,
+    onUpcomingClick: () -> Unit,
     viewModel: SeriesListViewModel = viewModel(factory = AppViewModelProvider.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -75,11 +79,19 @@ fun SeriesListScreen(
             TopAppBar(
                 title = { Text("Serientracker") },
                 actions = {
+                    IconButton(onClick = onUpcomingClick) {
+                        Icon(Icons.Filled.DateRange, contentDescription = "Demnächst")
+                    }
                     var menuOpen by remember { mutableStateOf(false) }
                     IconButton(onClick = { menuOpen = true }) {
                         Icon(Icons.Filled.MoreVert, contentDescription = "Menü")
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Demnächst") },
+                            leadingIcon = { Icon(Icons.Filled.DateRange, contentDescription = null) },
+                            onClick = { menuOpen = false; onUpcomingClick() },
+                        )
                         DropdownMenuItem(
                             text = { Text("TMDB-Abgleich") },
                             leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
@@ -133,8 +145,15 @@ fun SeriesListScreen(
             )
             Spacer(Modifier.height(4.dp))
             WatcherFilterRow(selected = state.watcherFilter, onSelect = viewModel::setWatcherFilter)
+            SortAndGenreRow(
+                sort = state.sort,
+                genre = state.genre,
+                genres = state.genres,
+                onSort = viewModel::setSort,
+                onGenre = viewModel::setGenre,
+            )
             if (!state.isLoading && state.items.isEmpty()) {
-                EmptyState(hasFilter = state.filter != null || state.query.isNotBlank())
+                EmptyState(hasFilter = state.filter != null || state.query.isNotBlank() || state.genre != null)
             } else {
                 LazyColumn(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
@@ -176,6 +195,60 @@ private fun StatusFilterRow(
                 onClick = { onSelect(status) },
                 label = { Text("${status.label} (${counts[status] ?: 0})") },
             )
+        }
+    }
+}
+
+@Composable
+private fun SortAndGenreRow(
+    sort: SeriesSort,
+    genre: String?,
+    genres: List<String>,
+    onSort: (SeriesSort) -> Unit,
+    onGenre: (String?) -> Unit,
+) {
+    var sortOpen by remember { mutableStateOf(false) }
+    var genreOpen by remember { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box {
+            AssistChip(
+                onClick = { sortOpen = true },
+                label = { Text("Sortierung: ${sort.label}") },
+                trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) },
+            )
+            DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
+                SeriesSort.entries.forEach { s ->
+                    DropdownMenuItem(
+                        text = { Text(s.label) },
+                        leadingIcon = { if (s == sort) Icon(Icons.Filled.Check, contentDescription = null) },
+                        onClick = { sortOpen = false; onSort(s) },
+                    )
+                }
+            }
+        }
+        Box {
+            AssistChip(
+                onClick = { genreOpen = true },
+                label = { Text("Genre: ${genre ?: "Alle"}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) },
+            )
+            DropdownMenu(expanded = genreOpen, onDismissRequest = { genreOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text("Alle") },
+                    leadingIcon = { if (genre == null) Icon(Icons.Filled.Check, contentDescription = null) },
+                    onClick = { genreOpen = false; onGenre(null) },
+                )
+                genres.forEach { g ->
+                    DropdownMenuItem(
+                        text = { Text(g) },
+                        leadingIcon = { if (g == genre) Icon(Icons.Filled.Check, contentDescription = null) },
+                        onClick = { genreOpen = false; onGenre(g) },
+                    )
+                }
+            }
         }
     }
 }

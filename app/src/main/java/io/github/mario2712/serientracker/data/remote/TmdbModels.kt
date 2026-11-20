@@ -31,10 +31,40 @@ data class TmdbShowJson(
     val seasons: List<TmdbSeasonSummaryJson> = emptyList(),
     @SerialName("next_episode_to_air") val nextEpisodeToAir: TmdbEpisodeJson? = null,
     val genres: List<TmdbGenreJson> = emptyList(),
+    val overview: String? = null,
+    @SerialName("vote_average") val voteAverage: Double? = null,
+    @SerialName("vote_count") val voteCount: Int? = null,
+    @SerialName("aggregate_credits") val credits: TmdbCreditsJson? = null,
+    val videos: TmdbVideosJson? = null,
 )
 
 @Serializable
 data class TmdbGenreJson(val id: Int = 0, val name: String = "")
+
+@Serializable
+data class TmdbCreditsJson(val cast: List<TmdbCastJson> = emptyList())
+
+@Serializable
+data class TmdbCastJson(
+    val name: String = "",
+    val order: Int = 999,
+    val roles: List<TmdbRoleJson> = emptyList(),
+)
+
+@Serializable
+data class TmdbRoleJson(val character: String? = null)
+
+@Serializable
+data class TmdbVideosJson(val results: List<TmdbVideoJson> = emptyList())
+
+@Serializable
+data class TmdbVideoJson(
+    val key: String = "",
+    val site: String = "",
+    val type: String = "",
+    @SerialName("iso_639_1") val language: String? = null,
+    val official: Boolean = false,
+)
 
 @Serializable
 data class TmdbSeasonSummaryJson(
@@ -73,6 +103,14 @@ data class TmdbShow(
     val seasons: List<TmdbSeason>,
     /** German genre names (language=de-DE), e.g. "Drama", "Krimi", "Sci-Fi & Fantasy". */
     val genres: List<String> = emptyList(),
+    val nextEpisodeSeason: Int? = null,
+    val nextEpisodeNumber: Int? = null,
+    val nextEpisodeName: String? = null,
+    val overview: String? = null,
+    val voteAverage: Double? = null,
+    val voteCount: Int? = null,
+    val trailerKey: String? = null,
+    val castSummary: String? = null,
 ) {
     val isEnded: Boolean? get() = status?.let { it == "Ended" || it == "Canceled" }
 

@@ -26,11 +26,20 @@
 - ✅ **Statistik:** Genres (Folgen/Stunden), Top-Folgen/-Staffeln/-Serien, Sehzeit (gesamt/Jahr/Serie),
   Verlauf 12 Monate, aktivster Tag, längster Binge, Wer & Status, Stapel der Schande
 
-## Weitere Statistik-Ideen
-- 💡 Ich vs. TMDB-Bewertung (strenger/großzügiger)
-- 💡 Ø Tage zwischen Ausstrahlung und Schauen („wie aktuell schaue ich“)
-- 💡 Jahresrückblick (Top-Serie, Stunden, Binge des Jahres)
-- 💡 Wochentag/Uhrzeit-Heatmap
+## v0.4
+- ✅ Benachrichtigung bei neuen Folgen (täglich ~8 Uhr; laufend, pausiert, aufgeholt, fertig – nicht abgebrochen/geplant)
+- ✅ „Demnächst“: neu erschienen (14 Tage) + angekündigte Folgen nach Heute/Woche/Monat/Später
+- ✅ Sortierung (zuletzt, Titel, Fortschritt, Bewertung, nächste Ausstrahlung) und Genre-Filter
+- ✅ Automatisches Backup (wöchentlich, Ordner frei wählbar, letzte 5 bleiben)
+- ✅ Serien-Infos: Beschreibung, TMDB-Score, Besetzung, Trailer
+- ✅ Statistik: Jahresrückblick, Ich vs. TMDB, „Wie aktuell schaust du?“, Wochentag/Uhrzeit-Heatmap
+
+## Ideen für später
+- 💡 Widget „Weiterschauen“
+- 💡 Rückgängig nach Abhaken, Wischen = nächste Folge
+- 💡 Update-Hinweis in der App
+- 💡 Mangas, Filme
+- 💡 Sync mit Johanna
 - 🔜 Rückgängig-Snackbar nach dem Abhaken oder Löschen
 
 ## Komfort

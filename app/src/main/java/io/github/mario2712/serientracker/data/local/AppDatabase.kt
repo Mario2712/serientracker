@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [SeriesEntity::class, SeasonEntity::class, EpisodeEntity::class, ImportProgressEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -62,9 +62,19 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v6: next announced episode and TMDB info (overview, score, trailer, cast). */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                listOf(
+                    "nextEpisodeSeason INTEGER", "nextEpisodeNumber INTEGER", "nextEpisodeName TEXT",
+                    "overview TEXT", "tmdbRating REAL", "tmdbVoteCount INTEGER", "trailerKey TEXT", "castSummary TEXT",
+                ).forEach { db.execSQL("ALTER TABLE series ADD COLUMN $it") }
+            }
+        }
+
         fun build(context: Context, name: String = NAME): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, name)
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 // Version 1 was only the empty skeleton; its data is replaced by the Excel seed.
                 .fallbackToDestructiveMigrationFrom(1)
                 .build()

@@ -1,7 +1,14 @@
 package io.github.mario2712.serientracker.ui.settings
 
 import android.content.ContentResolver
+import android.content.Intent
 import android.net.Uri
+import io.github.mario2712.serientracker.data.settings.BackgroundSettings
+import io.github.mario2712.serientracker.work.AutoBackup
+import io.github.mario2712.serientracker.work.WorkScheduler
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import androidx.compose.runtime.getValue
 import io.github.mario2712.serientracker.data.export.BackupRepository
 import io.github.mario2712.serientracker.data.export.ExportRepository
@@ -27,7 +34,53 @@ class SettingsViewModel(
     private val exportRepository: ExportRepository,
     private val backupRepository: BackupRepository,
     private val contentResolver: ContentResolver,
+    private val workScheduler: WorkScheduler,
 ) : ViewModel() {
+
+    /** Notification and auto-backup state for the settings screen. */
+    val background: StateFlow<BackgroundSettings> = settings.background
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BackgroundSettings())
+
+    fun setNotifications(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setNotificationsEnabled(enabled)
+            workScheduler.setNewEpisodeCheck(enabled)
+            message = if (enabled) "Täglich gegen 8 Uhr wird auf neue Folgen geprüft." else "Benachrichtigung aus."
+        }
+    }
+
+    fun checkNow() {
+        workScheduler.checkNow()
+        message = "Prüfung gestartet. Neue Folgen erscheinen als Benachrichtigung."
+    }
+
+    /** Folder picked with OpenDocumentTree; keeps access across restarts. */
+    fun setBackupFolder(uri: Uri) {
+        viewModelScope.launch {
+            runCatching {
+                contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+            settings.setBackupFolder(uri.toString())
+            settings.setBackupEnabled(true)
+            workScheduler.setAutoBackup(true)
+            message = "Automatisches Backup aktiv: wöchentlich, die letzten ${AutoBackup.KEEP} bleiben erhalten."
+        }
+    }
+
+    fun setAutoBackup(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setBackupEnabled(enabled)
+            workScheduler.setAutoBackup(enabled && settings.currentBackground().backupFolder != null)
+        }
+    }
+
+    fun backupNow() {
+        workScheduler.backupNow()
+        message = "Backup gestartet."
+    }
 
     var apiKey by mutableStateOf("")
         private set

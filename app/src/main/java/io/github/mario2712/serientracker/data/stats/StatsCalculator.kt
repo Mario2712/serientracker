@@ -55,6 +55,7 @@ data class Stats(
     val statusCounts: List<Bar>,
     val pileOfShame: List<Bar>,
     val deviations: List<Deviation>,
+    val extras: ExtraStats,
 )
 
 /** All statistics, computed from the full data set. Pure function; unit-tested. */
@@ -186,6 +187,7 @@ object StatsCalculator {
                 .map { Bar(it.key.label, it.value.toDouble()) }.sortedByDescending { it.value },
             pileOfShame = pile.sortedByDescending { it.value }.take(TOP),
             deviations = deviations.sortedBy { it.title.lowercase() },
+            extras = StatsExtrasCalculator.compute(all, zone),
         )
     }
 
