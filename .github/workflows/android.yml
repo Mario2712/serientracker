@@ -1,0 +1,97 @@
+name: Android Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK and run unit tests
+        run: ./gradlew --no-daemon assembleDebug testDebugUnitTest
+
+      # The unit tests write the app's Excel export of the untouched seed. Reading it back
+      # must give exactly the original list (serien.json), i.e. the export follows the Excel logic.
+      - name: Excel round trip check
+        run: |
+          pip install --quiet openpyxl
+          python3 tools/convert_excel.py app/build/test-output/serienliste_roundtrip.xlsx build/roundtrip.json
+          python3 tools/check_roundtrip.py app/src/main/assets/seed/serien.json build/roundtrip.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: excel-export-sample
+          path: app/build/test-output/serienliste_roundtrip.xlsx
+          if-no-files-found: ignore
+
+      - name: Rename APK
+        run: |
+          VERSION="$(tr -d '[:space:]' < version.txt)"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          cp app/build/outputs/apk/debug/app-debug.apk serientracker.apk
+          cp app/build/outputs/apk/debug/app-debug.apk "serientracker-${VERSION}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: serientracker-apk
+          path: serientracker.apk
+
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: app/build/reports/tests/
+
+      # Rolling release: one fixed download link that always holds the latest APK of each push.
+      # Open https://github.com/<owner>/<repo>/releases/tag/latest-build on the phone.
+      - name: Publish rolling release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest-build --cleanup-tag --yes || true
+          gh release create latest-build serientracker.apk \
+            --target "${GITHUB_SHA}" \
+            --title "Neueste Version ${VERSION} (Build ${GITHUB_RUN_NUMBER})" \
+            --notes "Testbuild · Branch: ${GITHUB_REF_NAME} · Commit: ${GITHUB_SHA::7}" \
+            --prerelease
+
+      # Stable release: on main, the version from version.txt is released once as v<version>,
+      # with the notes from CHANGELOG.md. Later pushes with the same version change nothing.
+      - name: Publish stable release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${VERSION}"
+          if gh release view "${TAG}" > /dev/null 2>&1; then
+            echo "Release ${TAG} gibt es schon, nichts zu tun."
+            exit 0
+          fi
+          awk -v v="## ${VERSION}" '$0 == v {found=1; next} found && /^## / {exit} found {print}' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then echo "Serientracker ${VERSION}" > release-notes.md; fi
+          gh release create "${TAG}" "serientracker-${VERSION}.apk" \
+            --target "${GITHUB_SHA}" \
+            --title "Serientracker ${VERSION}" \
+            --notes-file release-notes.md \
+            --latest

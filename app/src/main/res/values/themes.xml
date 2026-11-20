@@ -1,0 +1,4 @@
+<resources>
+    <!-- The real theme is set in Compose (ui/theme). This only covers the window before Compose draws. -->
+    <style name="Theme.Serientracker" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
