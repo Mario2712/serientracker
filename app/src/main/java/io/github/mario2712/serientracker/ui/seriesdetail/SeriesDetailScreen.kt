@@ -63,6 +63,7 @@ import io.github.mario2712.serientracker.data.local.isWatched
 import io.github.mario2712.serientracker.domain.EpisodeKind
 import io.github.mario2712.serientracker.domain.Progress
 import io.github.mario2712.serientracker.ui.AppViewModelProvider
+import io.github.mario2712.serientracker.ui.components.CatchUpBanner
 import io.github.mario2712.serientracker.ui.components.Poster
 import io.github.mario2712.serientracker.ui.components.StatusChip
 
@@ -79,6 +80,7 @@ fun SeriesDetailScreen(
     var selectedEpisodeId by rememberSaveable { mutableStateOf<Long?>(null) }
     var addSpecial by rememberSaveable { mutableStateOf(false) }
     val showExcel by viewModel.showExcel.collectAsStateWithLifecycle()
+    val catchUp by viewModel.catchUpMode.collectAsStateWithLifecycle()
     val title = (state as? SeriesDetailUiState.Loaded)?.data?.series?.title.orEmpty()
 
     Scaffold(
@@ -119,6 +121,8 @@ fun SeriesDetailScreen(
                     data = s.data,
                     message = viewModel.message,
                     showExcel = showExcel,
+                    catchUp = catchUp,
+                    onStopCatchUp = viewModel::stopCatchUp,
                     onMatch = { onMatch(viewModel.seriesId) },
                     onWatchNext = viewModel::watchNext,
                     onToggleEpisode = viewModel::toggleEpisode,
@@ -190,6 +194,8 @@ private fun DetailContent(
     data: SeriesWithSeasons,
     message: String?,
     showExcel: Boolean,
+    catchUp: Boolean,
+    onStopCatchUp: () -> Unit,
     onMatch: () -> Unit,
     onWatchNext: () -> Unit,
     onToggleEpisode: (Long, Boolean) -> Unit,
@@ -208,6 +214,9 @@ private fun DetailContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        if (catchUp) {
+            item { CatchUpBanner(onStop = onStopCatchUp) }
+        }
         item {
             Header(data = data, watched = watched, total = all.size, message = message, showExcel = showExcel)
         }

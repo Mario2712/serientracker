@@ -42,6 +42,13 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setShowExcelComparisons(show: Boolean) = set(showExcel, show)
 
+    private val catchUp = booleanPreferencesKey("catch_up_mode")
+
+    /** While on, ticking counts as "watched earlier" (no real date, not in the daily statistics). */
+    val catchUpMode: Flow<Boolean> = context.dataStore.data.map { it[catchUp] ?: false }
+
+    suspend fun setCatchUpMode(on: Boolean) = set(catchUp, on)
+
     val tmdbApiKey: Flow<String?> = context.dataStore.data.map { it[tmdbKey] }
 
     suspend fun currentTmdbApiKey(): String? = tmdbApiKey.first()

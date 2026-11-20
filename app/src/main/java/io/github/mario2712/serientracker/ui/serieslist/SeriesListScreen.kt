@@ -57,6 +57,7 @@ import io.github.mario2712.serientracker.domain.Progress
 import io.github.mario2712.serientracker.domain.WatchStatus
 import io.github.mario2712.serientracker.domain.WatcherFilter
 import io.github.mario2712.serientracker.ui.AppViewModelProvider
+import io.github.mario2712.serientracker.ui.components.CatchUpBanner
 import io.github.mario2712.serientracker.ui.components.Poster
 import io.github.mario2712.serientracker.ui.components.StatusChip
 
@@ -73,6 +74,7 @@ fun SeriesListScreen(
     viewModel: SeriesListViewModel = viewModel(factory = AppViewModelProvider.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val catchUp by viewModel.catchUpMode.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -96,6 +98,11 @@ fun SeriesListScreen(
                             text = { Text("TMDB-Abgleich") },
                             leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
                             onClick = { menuOpen = false; onSyncClick() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Nachtragen-Modus") },
+                            leadingIcon = { if (catchUp) Icon(Icons.Filled.Check, contentDescription = "aktiv") },
+                            onClick = { menuOpen = false; viewModel.setCatchUpMode(!catchUp) },
                         )
                         DropdownMenuItem(
                             text = { Text("Statistik") },
@@ -135,6 +142,9 @@ fun SeriesListScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             )
+            if (catchUp) {
+                CatchUpBanner(onStop = { viewModel.setCatchUpMode(false) }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            }
             if (state.unsyncedCount > 0) {
                 SyncBanner(count = state.unsyncedCount, onClick = onSyncClick)
             }

@@ -46,6 +46,7 @@ object AppViewModelProvider {
                 backupRepository = c().backupRepository,
                 contentResolver = c().contentResolver,
                 workScheduler = c().workScheduler,
+                seriesRepository = c().seriesRepository,
             )
         }
         initializer { AboutViewModel(c().appVersion, c().seriesRepository) }

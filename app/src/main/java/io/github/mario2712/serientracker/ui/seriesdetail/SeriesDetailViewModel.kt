@@ -29,8 +29,15 @@ class SeriesDetailViewModel(
     savedStateHandle: SavedStateHandle,
     private val repository: SeriesRepository,
     private val syncRepository: TmdbSyncRepository,
-    settings: SettingsRepository,
+    private val settings: SettingsRepository,
 ) : ViewModel() {
+
+    val catchUpMode: StateFlow<Boolean> = settings.catchUpMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun stopCatchUp() {
+        viewModelScope.launch { settings.setCatchUpMode(false) }
+    }
 
     /** Excel differences and Excel details can be switched off in the settings. */
     val showExcel: StateFlow<Boolean> = settings.showExcelComparisons

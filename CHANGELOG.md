@@ -3,6 +3,15 @@
 Neue Version: `version.txt` anheben und hier einen Abschnitt `## x.y.z` ergänzen.
 Nach dem Merge auf `main` erstellt CI daraus automatisch das Release `vx.y.z` mit APK.
 
+## 1.1.0
+
+- **Nachtragen-Modus** (Menü der Serienliste oder Einstellungen): Solange er an ist, zählt Abhaken als „früher gesehen“.
+  Solche Folgen zählen für Fortschritt, Status und Sehzeit, aber nicht für Verlauf, aktivsten Tag, Binge-Rekorde,
+  Heatmap, Jahresrückblick und „Wie aktuell schaust du?“. Ein Banner zeigt an, dass der Modus aktiv ist.
+- **Statistik korrigieren** (Einstellungen → Nachtragen): Die Tage mit den meisten Abhakungen werden aufgelistet;
+  ein Tipp markiert die Abhakungen eines Tages nachträglich als nachgetragen. Ein beliebiger Tag lässt sich auch wählen.
+- Im Folgen-Detailfenster heißt es bei solchen Folgen jetzt „früher gesehen (ohne genaues Datum)“.
+
 ## 1.0.1
 
 - Neue Einstellung „Excel-Vergleiche anzeigen“: lässt sich ausschalten, sobald nur noch die App genutzt wird.

@@ -48,8 +48,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.Locale
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
 private fun formatDateTime(millis: Long?): String? = millis?.let {
     Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd.MM.yyyy, HH:mm"))
@@ -92,6 +101,11 @@ fun SettingsScreen(
     val context = LocalContext.current
     val background by viewModel.background.collectAsStateWithLifecycle()
     val showExcel by viewModel.showExcel.collectAsStateWithLifecycle()
+    val catchUp by viewModel.catchUpMode.collectAsStateWithLifecycle()
+    var confirmDay by remember { mutableStateOf<Pair<LocalDate, Int>?>(null) }
+    var pickDay by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) { viewModel.loadBusiestDays() }
 
     Scaffold(
         topBar = {
@@ -131,6 +145,27 @@ fun SettingsScreen(
             OutlinedButton(onClick = viewModel::refreshAll, enabled = !viewModel.busy) {
                 Text("Alle abgeglichenen Serien aktualisieren")
             }
+
+            HorizontalDivider()
+            Text("Nachtragen", style = MaterialTheme.typography.titleMedium)
+            SwitchRow(text = "Nachtragen-Modus", checked = catchUp, onChange = viewModel::setCatchUpMode)
+            Text(
+                "Für Folgen, die du früher gesehen hast und jetzt nur nachträgst: Solange der Modus an ist, zählt " +
+                    "Abhaken für Fortschritt, Status und Sehzeit, aber nicht für Verlauf, Binge-Rekorde, Heatmap " +
+                    "und Jahresrückblick. Auch über das Menü der Serienliste erreichbar.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text("Statistik korrigieren", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Schon ohne Modus nachgetragen? Tippe auf den Tag, um seine Abhakungen als „früher gesehen“ zu markieren.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            viewModel.busiestDays.forEach { (date, count) ->
+                OutlinedButton(onClick = { confirmDay = date to count }, enabled = !viewModel.busy) {
+                    Text("${date.format(DateTimeFormatter.ofPattern("EEE, dd.MM.yyyy", Locale.GERMAN))} · $count Folgen")
+                }
+            }
+            TextButton(onClick = { pickDay = true }) { Text("Anderen Tag wählen") }
 
             HorizontalDivider()
             Text("Neue Folgen", style = MaterialTheme.typography.titleMedium)
@@ -222,6 +257,46 @@ fun SettingsScreen(
                     Text("Auf Excel-Stand zurücksetzen")
                 }
             }
+        }
+    }
+
+    confirmDay?.let { (date, count) ->
+        AlertDialog(
+            onDismissRequest = { confirmDay = null },
+            title = { Text("Als nachgetragen markieren?") },
+            text = {
+                Text(
+                    "$count Folgen vom ${date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))} gelten dann als früher gesehen. " +
+                        "Sie zählen weiter für Fortschritt und Sehzeit, aber nicht mehr für Verlauf, Binge und Heatmap.",
+                )
+            },
+            confirmButton = {
+                TextButton(enabled = count > 0, onClick = { confirmDay = null; viewModel.markDayAsCatchUp(date) }) {
+                    Text("Markieren")
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmDay = null }) { Text("Abbrechen") } },
+        )
+    }
+
+    if (pickDay) {
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = LocalDate.now().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+        )
+        DatePickerDialog(
+            onDismissRequest = { pickDay = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickDay = false
+                    state.selectedDateMillis?.let { millis ->
+                        val date = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
+                        scope.launch { confirmDay = date to viewModel.countOn(date) }
+                    }
+                }) { Text("Weiter") }
+            },
+            dismissButton = { TextButton(onClick = { pickDay = false }) { Text("Abbrechen") } },
+        ) {
+            DatePicker(state = state)
         }
     }
 

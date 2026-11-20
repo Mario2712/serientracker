@@ -19,6 +19,7 @@ import io.github.mario2712.serientracker.work.WorkScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class SerienTrackerApp : Application() {
@@ -62,7 +63,9 @@ class AppContainer(app: Application) {
     val upcomingRepository: UpcomingRepository by lazy { UpcomingRepository(database) }
     val workScheduler: WorkScheduler by lazy { WorkScheduler(app) }
     val settings: SettingsRepository by lazy { SettingsRepository(app) }
-    val seriesRepository: SeriesRepository by lazy { SeriesRepository(database) }
+    val seriesRepository: SeriesRepository by lazy {
+        SeriesRepository(database, catchUpMode = { settings.catchUpMode.first() })
+    }
     val tmdbClient: TmdbClient by lazy { TmdbClient { settings.currentTmdbApiKey() } }
     val tmdbSyncRepository: TmdbSyncRepository by lazy { TmdbSyncRepository(database, tmdbClient) }
     val tmdbSyncCoordinator: TmdbSyncCoordinator by lazy { TmdbSyncCoordinator(tmdbSyncRepository, appScope) }

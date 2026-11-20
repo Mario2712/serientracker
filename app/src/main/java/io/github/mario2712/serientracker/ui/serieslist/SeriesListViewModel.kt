@@ -41,6 +41,14 @@ class SeriesListViewModel(
 
     private val filters = MutableStateFlow(ListFilters())
 
+    /** Catch-up mode: ticks count as "watched earlier" (banner + menu entry). */
+    val catchUpMode: StateFlow<Boolean> = settings.catchUpMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun setCatchUpMode(on: Boolean) {
+        viewModelScope.launch { settings.setCatchUpMode(on) }
+    }
+
     val uiState: StateFlow<SeriesListUiState> =
         combine(
             repository.observeOverview(),
