@@ -151,14 +151,6 @@ fun EditSeriesScreen(
                 SeasonFields(viewModel)
             }
 
-            OutlinedTextField(
-                value = form.streamingService,
-                onValueChange = { v -> viewModel.update { it.copy(streamingService = v) } },
-                label = { Text("Wo? (z. B. Netflix)") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
             Column {
                 Text(
                     "Bewertung: " + (form.rating?.let { "$it/10" } ?: "keine"),

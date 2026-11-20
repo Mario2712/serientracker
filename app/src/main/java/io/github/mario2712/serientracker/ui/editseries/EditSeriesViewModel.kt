@@ -22,7 +22,6 @@ data class EditSeriesForm(
     val watcher: Watcher? = null,
     val genre: String = "",
     val originalTitle: String = "",
-    val streamingService: String = "",
     val rating: Int? = null,
     val notes: String = "",
     /** Episode count per season as typed, index 0 = season 1. */
@@ -74,7 +73,6 @@ class EditSeriesViewModel(
                         watcher = s.watcher,
                         genre = s.genre.orEmpty(),
                         originalTitle = s.originalTitle.orEmpty(),
-                        streamingService = s.streamingService.orEmpty(),
                         rating = s.rating,
                         notes = s.notes.orEmpty(),
                         seasons = counts.map { it.toString() }.ifEmpty { listOf("") },
@@ -129,7 +127,6 @@ class EditSeriesViewModel(
             watcher = f.watcher,
             genre = f.genre.trim().ifEmpty { null },
             originalTitle = f.originalTitle.trim().ifEmpty { null },
-            streamingService = f.streamingService.trim().ifEmpty { null },
             rating = f.rating,
             notes = f.notes.trim().ifEmpty { null },
         )

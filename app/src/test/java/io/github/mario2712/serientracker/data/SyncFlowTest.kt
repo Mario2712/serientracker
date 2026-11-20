@@ -81,7 +81,7 @@ class SyncFlowTest {
     }
 
     @Test
-    fun `extra tmdb specials are hidden, title and excel counts kept`() = runTest {
+    fun `all tmdb specials count, title and excel counts kept`() = runTest {
         importer().importIfNeeded()
         val sync = TmdbSyncRepository(db, fake)
         val ac = db.seriesDao().getAll().first { it.title == "Altered Carbon" }
@@ -90,18 +90,20 @@ class SyncFlowTest {
 
         assertTrue(outcome is MatchOutcome.Matched)
         val report = (outcome as MatchOutcome.Matched).report
-        assertEquals(19, report.total)
+        // TMDB has one special more than the Excel: it counts and shows up as difference.
+        assertEquals(20, report.total)
         assertEquals(19, report.watched)
-        assertFalse(report.hasDifference)
+        assertTrue(report.hasDifference)
         val stored = db.seriesDao().observeSeries(ac.id).first()!!
         val specials = stored.seasons.first { it.season.number == 0 }.episodes.sortedBy { it.number }
-        assertEquals(listOf(EpisodeKind.SPECIAL, EpisodeKind.HIDDEN), specials.map { it.kind })
+        assertEquals(listOf(EpisodeKind.SPECIAL, EpisodeKind.SPECIAL), specials.map { it.kind })
         assertTrue(specials[0].isWatched)
         assertFalse(specials[1].isWatched)
         // German TMDB title replaces the Excel title; the original title is kept beside it.
         assertEquals("Altered Carbon – Das Unsterblichkeitsprogramm", stored.series.title)
         assertEquals("Altered Carbon", stored.series.originalTitle)
         assertEquals(19, stored.series.excelTotal)
+        // Only a special is open: the Excel status "fertig" stays.
         assertEquals(WatchStatus.COMPLETED, stored.series.status)
 
         // A title edited by hand survives a refresh.
@@ -117,7 +119,23 @@ class SyncFlowTest {
         val repo = SeriesRepository(db)
         val ac = db.seriesDao().getAll().first { it.title == "Altered Carbon" }
         sync.link(ac.id, 400)
+        assertEquals(20, db.episodeDao().countEpisodes(ac.id))
+
+        // The second TMDB special is an extra: hide it → 19, like the Excel, and the series is complete.
+        val extra = db.seriesDao().observeSeries(ac.id).first()!!
+            .seasons.first { it.season.number == 0 }.episodes.first { it.number == 2 }
+        repo.setEpisodeKind(ac.id, extra.id, EpisodeKind.HIDDEN)
         assertEquals(19, db.episodeDao().countEpisodes(ac.id))
+        assertEquals(19, db.episodeDao().countWatched(ac.id))
+        assertEquals(WatchStatus.COMPLETED, db.seriesDao().getSeries(ac.id)!!.status)
+
+        // Tapping a hidden episode makes it count again and ticks it.
+        repo.countAndWatch(ac.id, extra.id, seasonNumber = 0)
+        val restored = db.episodeDao().getEpisode(extra.id)!!
+        assertEquals(EpisodeKind.SPECIAL, restored.kind)
+        assertTrue(restored.isWatched)
+        assertEquals(20, db.episodeDao().countWatched(ac.id))
+        repo.setEpisodeKind(ac.id, extra.id, EpisodeKind.HIDDEN)
 
         // Resleeved is a film on TMDB: add it as own special.
         val id = repo.addCustomSpecial(ac.id, "Resleeved", null, watched = true)

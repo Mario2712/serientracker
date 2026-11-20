@@ -74,6 +74,10 @@ class SeriesDetailViewModel(
         viewModelScope.launch { repository.setEpisodeRating(seriesId, episodeId, rating) }
     }
 
+    fun countAndWatch(episodeId: Long, seasonNumber: Int) {
+        viewModelScope.launch { repository.countAndWatch(seriesId, episodeId, seasonNumber) }
+    }
+
     fun setKind(episodeId: Long, kind: EpisodeKind) {
         viewModelScope.launch { repository.setEpisodeKind(seriesId, episodeId, kind) }
     }
@@ -109,6 +113,14 @@ class SeriesDetailViewModel(
         // Regular seasons first, specials (season 0) at the end.
         seasons = data.seasons
             .sortedBy { if (it.season.number == 0) Int.MAX_VALUE else it.season.number }
-            .map { s -> s.copy(episodes = s.episodes.sortedBy { it.number }) },
+            .map { s ->
+                // Specials in order of first air date (without date at the end), also custom ones.
+                val episodes = if (s.season.number == 0) {
+                    s.episodes.sortedWith(compareBy({ it.airDate ?: Long.MAX_VALUE }, { it.number }))
+                } else {
+                    s.episodes.sortedBy { it.number }
+                }
+                s.copy(episodes = episodes)
+            },
     )
 }

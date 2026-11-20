@@ -12,6 +12,7 @@ import io.github.mario2712.serientracker.data.remote.TmdbShow
 import io.github.mario2712.serientracker.domain.EpisodeKind
 import io.github.mario2712.serientracker.domain.Progress
 import io.github.mario2712.serientracker.domain.TitleMatcher
+import io.github.mario2712.serientracker.domain.WatchStatus
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 
@@ -112,23 +113,20 @@ class TmdbSyncRepository(
                 SeasonEntity(seriesId = seriesId, number = season.number, title = if (season.number == 0) "Specials" else null),
             )
             val existing = episodeDao.getEpisodes(seasonId).associateBy { it.number }
-            // First sync: only as many TMDB specials count as the Excel says; the rest is hidden.
-            // TMDB often lists extras there that are no specials for the user.
-            val countedSpecials = if (season.number == 0 && progress != null) {
-                season.episodes.sortedBy { it.number }.take(progress.maxSpecial ?: 0).map { it.number }
+            // All TMDB specials count; extras that are no specials for the user are hidden by hand.
+            // The Excel numbers specials 1, 2, 3 … in order of first air date.
+            val chronologicalSpecials = if (season.number == 0) {
+                season.episodes
+                    .sortedWith(compareBy({ it.airDate.toEpochDay() ?: Long.MAX_VALUE }, { it.number }))
+                    .map { it.number }
             } else {
-                null
+                emptyList()
             }
             val newEpisodes = season.episodes.filter { it.number !in existing }.map { ep ->
-                val kind = when {
-                    season.number > 0 -> EpisodeKind.REGULAR
-                    countedSpecials == null || ep.number in countedSpecials -> EpisodeKind.SPECIAL
-                    else -> EpisodeKind.HIDDEN
-                }
-                val watched = progress != null && kind != EpisodeKind.HIDDEN && Progress.isWatchedAtPosition(
+                val kind = if (season.number > 0) EpisodeKind.REGULAR else EpisodeKind.SPECIAL
+                val watched = progress != null && Progress.isWatchedAtPosition(
                     season = season.number,
-                    // Specials: the Excel counts them 1, 2, 3 … among the counted ones.
-                    episode = if (season.number == 0) countedSpecials!!.indexOf(ep.number) + 1 else ep.number,
+                    episode = if (season.number == 0) chronologicalSpecials.indexOf(ep.number) + 1 else ep.number,
                     lastSeason = progress.lastSeason,
                     lastEpisode = progress.lastEpisode,
                     lastSpecial = progress.lastSpecial,
@@ -156,7 +154,11 @@ class TmdbSyncRepository(
         val watched = episodeDao.countWatched(seriesId)
         val total = episodeDao.countEpisodes(seriesId)
         val status = if (progress != null || total > countBefore) {
-            Progress.autoStatus(series.status, watched, total, Progress.Change.NEW_EPISODES, show.isEnded)
+            val auto = Progress.autoStatus(series.status, watched, total, Progress.Change.NEW_EPISODES, show.isEnded)
+            // First sync: if only specials are open (all regular episodes seen), the Excel verdict
+            // ("fertig"/"aufgeholt") stays; extra TMDB specials alone should not pause the series.
+            val onlySpecialsOpen = episodeDao.nextUnwatched(seriesId) == null
+            if (progress != null && onlySpecialsOpen && auto == WatchStatus.PAUSED) series.status else auto
         } else {
             series.status
         }

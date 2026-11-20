@@ -168,7 +168,11 @@ Mit einzelnen Folgen kann man Lücken abbilden (eine Folge übersprungen), eine 
 
 ## Folgen-Typen & Specials
 - `HIDDEN` zählt nirgends (Fortschritt, Status, Excel, Statistik). „Nächste Folge“ nimmt nur `REGULAR`.
-- Erster Abgleich: von den TMDB-Specials zählen die ersten `maxSpecial` aus der Excel, der Rest ist `HIDDEN`.
+- Abgleich: alle TMDB-Specials zählen (`SPECIAL`). Gesehen sind beim ersten Abgleich die ersten `lastSpecial`
+  in chronologischer Reihenfolge. Sind nur Specials offen, bleibt der Excel-Status („fertig“/„aufgeholt“).
+- Extras blendet der Nutzer per langem Drücken aus; Antippen einer ausgeblendeten Folge lässt sie wieder zählen
+  und hakt sie ab (`SeriesRepository.countAndWatch`).
+- Specials werden chronologisch nach Erstausstrahlung angezeigt (als Liste mit Titel), auch eigene.
 - Eigene Specials: Staffel 0, `isCustom = 1`, Nummer ab 1000; werden beim Aktualisieren nie verändert.
 - Excel-Export: „Special“ = laufende Nummer der gesehenen Specials nach Erstausstrahlung.
 

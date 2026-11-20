@@ -97,6 +97,15 @@ class SeriesRepository(private val db: AppDatabase) {
         afterProgressChange(seriesId, Progress.Change.NEW_EPISODES)
     }
 
+    /** Tapping a hidden episode: it counts again (special in season 0, else regular) and is ticked. */
+    suspend fun countAndWatch(seriesId: Long, episodeId: Long, seasonNumber: Int) = db.withTransaction {
+        episodeDao.setKind(episodeId, if (seasonNumber == 0) EpisodeKind.SPECIAL else EpisodeKind.REGULAR)
+        if (episodeDao.getEpisode(episodeId)?.watchedAt == null) {
+            episodeDao.setWatched(episodeId, System.currentTimeMillis())
+        }
+        afterProgressChange(seriesId, Progress.Change.WATCHED)
+    }
+
     /** Adds a special TMDB does not know (e.g. a film the user counts as special). */
     suspend fun addCustomSpecial(seriesId: Long, title: String, airDate: Long?, watched: Boolean): Long =
         db.withTransaction {

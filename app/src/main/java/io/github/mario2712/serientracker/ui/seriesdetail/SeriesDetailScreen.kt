@@ -51,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.mario2712.serientracker.data.local.EpisodeEntity
 import io.github.mario2712.serientracker.data.local.ImportProgressEntity
 import io.github.mario2712.serientracker.data.local.SeasonWithEpisodes
 import io.github.mario2712.serientracker.data.local.SeriesWithSeasons
@@ -117,6 +118,7 @@ fun SeriesDetailScreen(
                     onWatchNext = viewModel::watchNext,
                     onToggleEpisode = viewModel::toggleEpisode,
                     onToggleSeason = viewModel::toggleSeason,
+                    onCountAndWatch = viewModel::countAndWatch,
                     onEpisodeDetails = { selectedEpisodeId = it },
                     onAddSpecial = { addSpecial = true },
                 )
@@ -135,15 +137,21 @@ fun SeriesDetailScreen(
     }
 
     // Look the episode up in the live data, so the sheet updates after toggling.
-    val selected = selectedEpisodeId?.let { id ->
-        (state as? SeriesDetailUiState.Loaded)?.data?.seasons?.firstNotNullOfOrNull { season ->
-            season.episodes.firstOrNull { it.id == id }?.let { season.season.number to it }
-        }
+    val selectedSeason = selectedEpisodeId?.let { id ->
+        (state as? SeriesDetailUiState.Loaded)?.data?.seasons?.firstOrNull { season -> season.episodes.any { it.id == id } }
     }
-    selected?.let { (seasonNumber, episode) ->
+    val selectedEpisode = selectedSeason?.episodes?.firstOrNull { it.id == selectedEpisodeId }
+    if (selectedSeason != null && selectedEpisode != null) {
+        val episode = selectedEpisode
         EpisodeDetailSheet(
-            seasonNumber = seasonNumber,
+            seasonNumber = selectedSeason.season.number,
             episode = episode,
+            // Specials are numbered 1, 2, 3 … by air date among the counting ones.
+            specialNumber = if (selectedSeason.season.number == 0) {
+                selectedSeason.episodes.filter { it.counts }.indexOfFirst { it.id == episode.id }.takeIf { it >= 0 }?.plus(1)
+            } else {
+                null
+            },
             onDismiss = { selectedEpisodeId = null },
             onToggle = { viewModel.toggleEpisode(episode.id, it) },
             onSetWatchedAt = { viewModel.setWatchedAt(episode.id, it) },
@@ -180,6 +188,7 @@ private fun DetailContent(
     onWatchNext: () -> Unit,
     onToggleEpisode: (Long, Boolean) -> Unit,
     onToggleSeason: (Long, Boolean) -> Unit,
+    onCountAndWatch: (Long, Int) -> Unit,
     onEpisodeDetails: (Long) -> Unit,
     onAddSpecial: () -> Unit,
 ) {
@@ -221,7 +230,14 @@ private fun DetailContent(
                 season = season,
                 // Open the season that holds the next episode by default.
                 initiallyExpanded = season.season.number == next?.first,
-                onToggleEpisode = onToggleEpisode,
+                // Tapping a hidden episode makes it count again and ticks it.
+                onTapEpisode = { ep ->
+                    if (ep.kind == EpisodeKind.HIDDEN) {
+                        onCountAndWatch(ep.id, season.season.number)
+                    } else {
+                        onToggleEpisode(ep.id, !ep.isWatched)
+                    }
+                },
                 onToggleSeason = onToggleSeason,
                 onEpisodeDetails = onEpisodeDetails,
             )
@@ -273,7 +289,6 @@ private fun Header(data: SeriesWithSeasons, watched: Int, total: Int, message: S
                 val facts = listOfNotNull(
                     series.watcher?.let { "Wer: ${it.label}" },
                     series.genre,
-                    series.streamingService?.takeIf { it.isNotBlank() },
                     ratingText,
                 )
                 if (facts.isNotEmpty()) Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
@@ -352,7 +367,7 @@ private fun formatDate(epochDay: Long): String =
 private fun SeasonCard(
     season: SeasonWithEpisodes,
     initiallyExpanded: Boolean,
-    onToggleEpisode: (Long, Boolean) -> Unit,
+    onTapEpisode: (EpisodeEntity) -> Unit,
     onToggleSeason: (Long, Boolean) -> Unit,
     onEpisodeDetails: (Long) -> Unit,
 ) {
@@ -387,21 +402,31 @@ private fun SeasonCard(
                 modifier = Modifier.padding(8.dp),
             )
         }
-        if (expanded) {
+        if (expanded && season.season.number == 0) {
+            // Specials as a list with title and air date, in order of first air date.
+            var counter = 0
+            Column(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp)) {
+                season.episodes.forEach { ep ->
+                    val number = if (ep.counts) ++counter else null
+                    SpecialRow(
+                        number = number,
+                        episode = ep,
+                        onClick = { onTapEpisode(ep) },
+                        onLongClick = { onEpisodeDetails(ep.id) },
+                    )
+                }
+            }
+        } else if (expanded) {
             FlowRow(
                 modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 season.episodes.forEach { ep ->
                     EpisodeChip(
-                        label = when {
-                            ep.isCustom -> ep.title?.take(12) ?: "Special"
-                            ep.kind == EpisodeKind.SPECIAL && season.season.number > 0 -> "S ${ep.number}"
-                            else -> ep.number.toString()
-                        },
+                        label = if (ep.kind == EpisodeKind.SPECIAL) "S ${ep.number}" else ep.number.toString(),
                         watched = ep.isWatched,
                         hidden = ep.kind == EpisodeKind.HIDDEN,
-                        onClick = { onToggleEpisode(ep.id, !ep.isWatched) },
+                        onClick = { onTapEpisode(ep) },
                         onLongClick = { onEpisodeDetails(ep.id) },
                     )
                 }

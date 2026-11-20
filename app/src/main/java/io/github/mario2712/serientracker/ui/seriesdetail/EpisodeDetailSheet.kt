@@ -26,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -111,11 +112,71 @@ fun EpisodeChip(
     }
 }
 
+/** One special in the specials list: running number, title, air date; tap ticks, long press opens details. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun SpecialRow(number: Int?, episode: EpisodeEntity, onClick: () -> Unit, onLongClick: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    val hidden = episode.kind == EpisodeKind.HIDDEN
+    val watched = episode.isWatched && !hidden
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.small)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onLongClick()
+                },
+                onLongClickLabel = "Details",
+            )
+            .alpha(if (hidden) 0.45f else 1f)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            number?.let { "$it." } ?: "–",
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.width(32.dp),
+        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                episode.title ?: "Special",
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 2,
+                textDecoration = if (hidden) TextDecoration.LineThrough else null,
+            )
+            val info = listOfNotNull(
+                episode.airDate?.let { LocalDate.ofEpochDay(it).format(dateFormat) },
+                "eigenes Special".takeIf { episode.isCustom },
+                episode.rating?.let { "★ $it" },
+                "ausgeblendet – antippen zum Zählen".takeIf { hidden },
+            )
+            if (info.isNotEmpty()) {
+                Text(
+                    info.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Icon(
+            Icons.Filled.Check,
+            contentDescription = if (watched) "gesehen" else "nicht gesehen",
+            tint = if (watched) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+            modifier = Modifier.size(24.dp),
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun EpisodeDetailSheet(
     seasonNumber: Int,
     episode: EpisodeEntity,
+    /** Running number among the counting specials (season 0), shown as "Special n". */
+    specialNumber: Int? = null,
     onDismiss: () -> Unit,
     onToggle: (Boolean) -> Unit,
     onSetWatchedAt: (Long) -> Unit,
@@ -130,7 +191,11 @@ fun EpisodeDetailSheet(
                 .padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            val code = if (episode.isCustom) "Eigenes Special" else Progress.episodeCode(seasonNumber, episode.number)
+            val code = when {
+                episode.isCustom -> listOfNotNull("Eigenes Special", specialNumber?.let { "Nr. $it" }).joinToString(" · ")
+                seasonNumber == 0 -> specialNumber?.let { "Special $it" } ?: "Special (ausgeblendet)"
+                else -> Progress.episodeCode(seasonNumber, episode.number)
+            }
             Text(code, style = MaterialTheme.typography.labelLarge)
             Text(episode.title ?: "Kein Titel bekannt", style = MaterialTheme.typography.headlineSmall)
             Detail(
@@ -147,19 +212,19 @@ fun EpisodeDetailSheet(
                 Text(if (episode.isWatched) "Abhak-Datum ändern" else "Mit Datum abhaken")
             }
 
-            Text("Bewertung", style = MaterialTheme.typography.titleSmall)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                (1..10).forEach { value ->
-                    FilterChip(
-                        selected = episode.rating == value,
-                        onClick = { onRate(if (episode.rating == value) null else value) },
-                        label = { Text(value.toString()) },
-                    )
-                }
-            }
-            if (episode.rating != null) {
-                TextButton(onClick = { onRate(null) }) { Text("Bewertung entfernen") }
-            }
+            // Same control as the series rating: slider 0..10, 0 = no rating. Saved when released.
+            var rating by remember(episode.id, episode.rating) { mutableStateOf((episode.rating ?: 0).toFloat()) }
+            Text(
+                "Bewertung: " + (rating.toInt().takeIf { it > 0 }?.let { "$it/10" } ?: "keine"),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Slider(
+                value = rating,
+                onValueChange = { rating = it },
+                onValueChangeFinished = { onRate(rating.toInt().takeIf { it > 0 }) },
+                valueRange = 0f..10f,
+                steps = 9,
+            )
 
             Text("Zählt als", style = MaterialTheme.typography.titleSmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
