@@ -3,6 +3,12 @@
 Neue Version: `version.txt` anheben und hier einen Abschnitt `## x.y.z` ergänzen.
 Nach dem Merge auf `main` erstellt CI daraus automatisch das Release `vx.y.z` mit APK.
 
+## 1.0.1
+
+- Neue Einstellung „Excel-Vergleiche anzeigen“: lässt sich ausschalten, sobald nur noch die App genutzt wird.
+  Blendet die Abweichungen zur Excel (Serie, Statistik, TMDB-Abgleich), den Excel-Stand noch nicht abgeglichener
+  Serien und „Auf Excel-Stand zurücksetzen“ aus. Der Excel-Export bleibt verfügbar.
+
 ## 1.0.0
 
 Erste stabile Version des Serientrackers.
@@ -31,8 +37,6 @@ Erste stabile Version des Serientrackers.
 ### Daten
 - Excel-Export `serienliste_yyyymmdd.xlsx` im Format der ursprünglichen Liste (+ Spalte Originaltitel, Blatt „Info“).
 - Archiv als JSON exportieren und wiederherstellen; automatisches wöchentliches Backup in einen Ordner deiner Wahl.
-- „Excel-Vergleiche anzeigen“ lässt sich in den Einstellungen ausschalten, sobald nur noch die App genutzt wird
-  (blendet Abweichungen, Excel-Stand und „Auf Excel-Stand zurücksetzen“ aus; der Excel-Export bleibt).
 
 ### Hinweise
 - Für den TMDB-Abgleich braucht die App einen kostenlosen TMDB-API-Key (Einstellungen).
