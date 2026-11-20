@@ -18,7 +18,8 @@ android {
         targetSdk = 35
         // CI sets the build number so every APK can be installed over the previous one.
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
-        versionName = "0.4.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
+        // The app version lives in version.txt (repo root); CI also uses it for the release tag.
+        versionName = rootProject.file("version.txt").readText().trim()
     }
 
     signingConfigs {

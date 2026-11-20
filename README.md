@@ -3,18 +3,28 @@
 Android-App, um geschaute Serien zu tracken: Staffeln, Folgen, Status, Bewertung.
 Kotlin · Jetpack Compose · Material 3 · Room. Alles offline, alles lokal.
 
+Aktuelle Version: siehe [`version.txt`](version.txt) · Änderungen: [`CHANGELOG.md`](CHANGELOG.md)
+
 ## App aufs Handy (Google Pixel)
 
-Jeder Push baut die App über GitHub Actions und stellt sie zum Download bereit.
+Es gibt zwei Download-Links:
 
-1. Am Pixel die Seite **Releases → „Neueste Version“** öffnen
-   (`https://github.com/mario2712/serientracker/releases/tag/latest-build`).
-2. `serientracker.apk` herunterladen und öffnen.
+| | Link | Inhalt |
+|---|---|---|
+| **Stabile Version** | `https://github.com/mario2712/serientracker/releases/latest` | Das Release der aktuellen Version (z. B. v1.0.0), entsteht beim Merge auf `main` |
+| **Neuester Testbuild** | `https://github.com/mario2712/serientracker/releases/tag/latest-build` | Wird bei jedem Push neu gebaut |
+
+1. Am Pixel einen der Links öffnen.
+2. Die APK herunterladen und öffnen.
 3. Beim ersten Mal fragt Android, ob der Browser Apps installieren darf: **Zulassen**.
 4. Weitere Builds lassen sich einfach drüber installieren, die Daten bleiben erhalten.
    Alle Builds sind mit demselben Debug-Key (`app/debug.keystore`) signiert.
 
 Alternativ: Unter **Actions → letzter Lauf → Artifacts** liegt die APK als ZIP.
+
+### Neue Version veröffentlichen
+1. `version.txt` anheben (z. B. `1.1.0`) und in `CHANGELOG.md` einen Abschnitt `## 1.1.0` ergänzen.
+2. Auf `main` mergen. CI baut, testet und erstellt das Release `v1.1.0` mit APK und den Changelog-Notizen.
 
 ## Erster Start: Excel-Liste + TMDB
 
