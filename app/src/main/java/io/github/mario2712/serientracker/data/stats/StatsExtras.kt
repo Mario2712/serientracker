@@ -1,6 +1,9 @@
 package io.github.mario2712.serientracker.data.stats
 
 import io.github.mario2712.serientracker.data.local.EpisodeEntity
+import io.github.mario2712.serientracker.data.local.EpisodeViewEntity
+import io.github.mario2712.serientracker.data.local.zone
+import io.github.mario2712.serientracker.data.local.zoneOf
 import io.github.mario2712.serientracker.data.local.SeriesEntity
 import io.github.mario2712.serientracker.data.local.SeriesWithSeasons
 import io.github.mario2712.serientracker.data.local.counts
@@ -69,17 +72,29 @@ object StatsExtrasCalculator {
 
     private const val MIN_EPISODES_FOR_DELAY = 3
 
-    private data class Watch(val series: SeriesEntity, val episode: EpisodeEntity, val season: Int, val at: LocalDateTime)
+    /** One real viewing in the local time where it was ticked; [first] = first viewing of the episode. */
+    private data class Watch(
+        val series: SeriesEntity,
+        val episode: EpisodeEntity,
+        val season: Int,
+        val at: LocalDateTime,
+        val first: Boolean,
+    )
 
-    fun compute(all: List<SeriesWithSeasons>, zone: ZoneId): ExtraStats {
-        // Only real watch moments; dates taken from the Excel import are approximations.
+    fun compute(all: List<SeriesWithSeasons>, extraViews: Map<Long, List<EpisodeViewEntity>> = emptyMap()): ExtraStats {
+        // Only real watch moments (no Excel/catch-up dates), each in the zone where it was ticked.
         val watches = all.flatMap { data ->
             data.seasons.flatMap { season ->
-                season.episodes
-                    .filter { it.counts && it.isWatched && !it.watchedAtImported }
-                    .map { ep ->
-                        Watch(data.series, ep, season.season.number, LocalDateTime.ofInstant(Instant.ofEpochMilli(ep.watchedAt!!), zone))
+                season.episodes.filter { it.counts && it.isWatched }.flatMap { ep ->
+                    val first = if (ep.watchedAtImported) {
+                        emptyList()
+                    } else {
+                        listOf(Watch(data.series, ep, season.season.number, local(ep.watchedAt!!, ep.zone), first = true))
                     }
+                    first + extraViews[ep.id].orEmpty().filter { !it.imported }.map { v ->
+                        Watch(data.series, ep, season.season.number, local(v.watchedAt, zoneOf(v.zoneId)), first = false)
+                    }
+                }
             }
         }
         val medianRuntime = all.associate { data ->
@@ -142,8 +157,11 @@ object StatsExtrasCalculator {
         )
     }
 
+    private fun local(millis: Long, zone: ZoneId): LocalDateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(millis), zone)
+
     private fun delay(watches: List<Watch>): DelayStats {
-        val withAir = watches.mapNotNull { w ->
+        // Only the first viewing tells how soon after airing an episode was watched.
+        val withAir = watches.filter { it.first }.mapNotNull { w ->
             val air = w.episode.airDate?.let(LocalDate::ofEpochDay) ?: return@mapNotNull null
             val days = ChronoUnit.DAYS.between(air, w.at.toLocalDate())
             if (days < 0) null else w to days

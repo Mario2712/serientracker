@@ -5,6 +5,7 @@ import io.github.mario2712.serientracker.data.local.AppDatabase
 import io.github.mario2712.serientracker.data.local.EpisodeEntity
 import io.github.mario2712.serientracker.data.local.SeasonEntity
 import io.github.mario2712.serientracker.data.local.SeriesEntity
+import io.github.mario2712.serientracker.data.local.HOME_ZONE
 import io.github.mario2712.serientracker.data.local.TMDB_META_VERSION
 import io.github.mario2712.serientracker.data.remote.TmdbDataSource
 import io.github.mario2712.serientracker.data.remote.TmdbSearchResult
@@ -26,6 +27,8 @@ data class SyncReport(
     val total: Int,
     /** Episodes added by a refresh of an already linked show, e.g. "S05E09 „Titel“" (for notifications). */
     val newEpisodes: List<String> = emptyList(),
+    /** To merge several entries of the same show (duplicates) in notifications. */
+    val tmdbId: Int? = null,
 ) {
     /** Excel and TMDB disagree; worth a look by the user. */
     val hasDifference: Boolean
@@ -150,6 +153,7 @@ class TmdbSyncRepository(
                     airDate = ep.airDate.toEpochDay(),
                     watchedAt = if (watched) watchedAt else null,
                     watchedAtImported = watched,
+                    watchedZone = if (watched) HOME_ZONE else null,
                     kind = kind,
                     runtime = ep.runtime,
                 )
@@ -214,7 +218,7 @@ class TmdbSyncRepository(
                 status = status,
             ),
         )
-        SyncReport(seriesId, newTitle, progress?.watched, progress?.total, watched, total, added)
+        SyncReport(seriesId, newTitle, progress?.watched, progress?.total, watched, total, added, show.id)
     }
 
     private fun String?.toEpochDay(): Long? =

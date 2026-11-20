@@ -40,7 +40,7 @@ interface EpisodeDao {
     suspend fun insertEpisodes(episodes: List<EpisodeEntity>)
 
     @Insert
-    suspend fun insertEpisodesStrict(episodes: List<EpisodeEntity>)
+    suspend fun insertEpisodesStrict(episodes: List<EpisodeEntity>): List<Long>
 
     @Insert
     suspend fun insertEpisode(episode: EpisodeEntity): Long
@@ -58,21 +58,21 @@ interface EpisodeDao {
      * Ticking by hand. [imported] = true means "watched earlier, no exact date" (catch-up mode);
      * such episodes are left out of the daily statistics.
      */
-    @Query("UPDATE episodes SET watchedAt = :watchedAt, watchedAtImported = :imported WHERE id = :episodeId")
-    suspend fun setWatched(episodeId: Long, watchedAt: Long?, imported: Boolean = false)
-
-    /** All real (exact) watch moments, for finding catch-up days. */
-    @Query("SELECT watchedAt FROM episodes WHERE watchedAt IS NOT NULL AND watchedAtImported = 0")
-    suspend fun realWatchTimes(): List<Long>
-
-    /** Marks the real watch moments in [from]..[to] as "watched earlier"; returns how many. */
     @Query(
         """
-        UPDATE episodes SET watchedAtImported = 1
-        WHERE watchedAt IS NOT NULL AND watchedAt BETWEEN :from AND :to AND watchedAtImported = 0
+        UPDATE episodes SET watchedAt = :watchedAt, watchedAtImported = :imported,
+            watchedZone = CASE WHEN :watchedAt IS NULL THEN NULL ELSE :zone END
+        WHERE id = :episodeId
         """,
     )
-    suspend fun markRangeImported(from: Long, to: Long): Int
+    suspend fun setWatched(episodeId: Long, watchedAt: Long?, imported: Boolean = false, zone: String? = HOME_ZONE)
+
+    /** All real (exact) first viewings, for finding catch-up days. */
+    @Query("SELECT id, watchedAt, watchedZone FROM episodes WHERE watchedAt IS NOT NULL AND watchedAtImported = 0")
+    suspend fun realWatchMoments(): List<WatchMoment>
+
+    @Query("UPDATE episodes SET watchedAtImported = 1 WHERE id IN (:ids)")
+    suspend fun markImported(ids: List<Long>)
 
     @Query("UPDATE episodes SET rating = :rating WHERE id = :episodeId")
     suspend fun setRating(episodeId: Long, rating: Int?)
@@ -83,23 +83,27 @@ interface EpisodeDao {
     /** Ticks the unwatched, counting episodes of a season; already watched ones keep their date. */
     @Query(
         """
-        UPDATE episodes SET watchedAt = :watchedAt, watchedAtImported = :imported
+        UPDATE episodes SET watchedAt = :watchedAt, watchedAtImported = :imported, watchedZone = :zone
         WHERE seasonId = :seasonId AND watchedAt IS NULL AND kind != 'HIDDEN'
         """,
     )
-    suspend fun markSeasonWatched(seasonId: Long, watchedAt: Long, imported: Boolean = false)
+    suspend fun markSeasonWatched(seasonId: Long, watchedAt: Long, imported: Boolean = false, zone: String = HOME_ZONE)
 
-    @Query("UPDATE episodes SET watchedAt = NULL, watchedAtImported = 0 WHERE seasonId = :seasonId")
+    /** Counting, already watched episodes of a season (for "Staffel nochmal gesehen"). */
+    @Query("SELECT * FROM episodes WHERE seasonId = :seasonId AND kind != 'HIDDEN' ORDER BY number")
+    suspend fun countingEpisodes(seasonId: Long): List<EpisodeEntity>
+
+    @Query("UPDATE episodes SET watchedAt = NULL, watchedAtImported = 0, watchedZone = NULL WHERE seasonId = :seasonId")
     suspend fun clearSeasonWatched(seasonId: Long)
 
     @Query(
         """
-        UPDATE episodes SET watchedAt = :watchedAt, watchedAtImported = :imported
+        UPDATE episodes SET watchedAt = :watchedAt, watchedAtImported = :imported, watchedZone = :zone
         WHERE watchedAt IS NULL AND kind != 'HIDDEN'
             AND seasonId IN (SELECT id FROM seasons WHERE seriesId = :seriesId)
         """,
     )
-    suspend fun markAllWatched(seriesId: Long, watchedAt: Long, imported: Boolean = false)
+    suspend fun markAllWatched(seriesId: Long, watchedAt: Long, imported: Boolean = false, zone: String = HOME_ZONE)
 
     @Query(
         """

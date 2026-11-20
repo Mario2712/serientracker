@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.mario2712.serientracker.data.local.SeriesOverview
+import io.github.mario2712.serientracker.data.local.displayTitle
 import io.github.mario2712.serientracker.domain.Progress
 import io.github.mario2712.serientracker.domain.WatchStatus
 import io.github.mario2712.serientracker.domain.WatcherFilter
@@ -302,7 +303,7 @@ private fun SeriesRow(item: SeriesOverview, onClick: () -> Unit, onWatchNext: ()
             }
             Column(Modifier.weight(1f)) {
                 Text(
-                    item.series.title,
+                    item.series.displayTitle,
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,

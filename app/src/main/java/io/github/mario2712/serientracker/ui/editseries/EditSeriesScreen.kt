@@ -41,6 +41,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.mario2712.serientracker.domain.WatchStatus
 import io.github.mario2712.serientracker.domain.Watcher
 import io.github.mario2712.serientracker.ui.tmdbsync.CandidateRow
+import io.github.mario2712.serientracker.ui.seriesdetail.DuplicateWarningDialog
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
@@ -51,9 +52,18 @@ import io.github.mario2712.serientracker.ui.AppViewModelProvider
 fun EditSeriesScreen(
     onDone: (savedId: Long, isNew: Boolean) -> Unit,
     onBack: () -> Unit,
+    onOpenExisting: (Long) -> Unit = {},
     viewModel: EditSeriesViewModel = viewModel(factory = AppViewModelProvider.Factory),
 ) {
     val form = viewModel.form
+    viewModel.duplicates?.let { found ->
+        DuplicateWarningDialog(
+            existing = found,
+            onOpen = { id -> viewModel.dismissDuplicates(); onOpenExisting(id) },
+            onCreateAnyway = { viewModel.createAnyway { id -> onDone(id, true) } },
+            onDismiss = viewModel::dismissDuplicates,
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -122,6 +132,15 @@ fun EditSeriesScreen(
                     )
                 }
             }
+
+            OutlinedTextField(
+                value = form.label,
+                onValueChange = { v -> viewModel.update { it.copy(label = v) } },
+                label = { Text("Zusatzname (optional)") },
+                supportingText = { Text("Unterscheidet doppelte Einträge, z. B. „Rewatch 2026“ oder „Mario alleine“") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             OutlinedTextField(
                 value = form.originalTitle,

@@ -8,13 +8,17 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [SeriesEntity::class, SeasonEntity::class, EpisodeEntity::class, ImportProgressEntity::class],
-    version = 6,
+    entities = [
+        SeriesEntity::class, SeasonEntity::class, EpisodeEntity::class, ImportProgressEntity::class,
+        EpisodeViewEntity::class,
+    ],
+    version = 7,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun seriesDao(): SeriesDao
     abstract fun episodeDao(): EpisodeDao
+    abstract fun episodeViewDao(): EpisodeViewDao
 
     companion object {
         const val NAME = "serientracker.db"
@@ -72,9 +76,31 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v7: time zone per viewing, further viewings, extra name for duplicates. */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE episodes ADD COLUMN watchedZone TEXT")
+                db.execSQL("UPDATE episodes SET watchedZone = '$HOME_ZONE' WHERE watchedAt IS NOT NULL")
+                db.execSQL("ALTER TABLE series ADD COLUMN label TEXT")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `episode_views` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `episodeId` INTEGER NOT NULL,
+                        `watchedAt` INTEGER NOT NULL,
+                        `imported` INTEGER NOT NULL DEFAULT 0,
+                        `zoneId` TEXT NOT NULL,
+                        FOREIGN KEY(`episodeId`) REFERENCES `episodes`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_episode_views_episodeId` ON `episode_views` (`episodeId`)")
+            }
+        }
+
         fun build(context: Context, name: String = NAME): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, name)
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 // Version 1 was only the empty skeleton; its data is replaced by the Excel seed.
                 .fallbackToDestructiveMigrationFrom(1)
                 .build()

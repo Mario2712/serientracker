@@ -67,6 +67,7 @@ fun AppNavHost(openSeriesId: Long? = null) {
                 onBack = { nav.popBackStack() },
                 onEdit = { nav.navigate(Routes.edit(it)) },
                 onMatch = { nav.navigate(Routes.match(it)) },
+                onOpenSeries = { nav.navigate(Routes.detail(it)) },
             )
         }
         composable(Routes.SYNC) {
@@ -113,6 +114,7 @@ fun AppNavHost(openSeriesId: Long? = null) {
                     }
                 },
                 onBack = { nav.popBackStack() },
+                onOpenExisting = { nav.navigate(Routes.detail(it)) { popUpTo(Routes.LIST) } },
             )
         }
     }

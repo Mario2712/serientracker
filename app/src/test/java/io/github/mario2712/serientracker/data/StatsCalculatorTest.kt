@@ -93,7 +93,7 @@ class StatsCalculatorTest {
         assertEquals(LocalDate.of(2026, 11, 1), stats.mostActiveDay!!.date)
         assertEquals(3, stats.longestBinge!!.episodes)
         assertEquals("Dark", stats.longestBinge!!.title)
-        assertEquals(listOf("2026", "vor dem Abgleich"), stats.hoursPerYear.map { it.label })
+        assertEquals(listOf("2026", "ohne genaues Datum"), stats.hoursPerYear.map { it.label })
     }
 
     @Test

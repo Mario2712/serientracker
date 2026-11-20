@@ -22,6 +22,9 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
@@ -58,6 +61,7 @@ import io.github.mario2712.serientracker.data.local.EpisodeEntity
 import io.github.mario2712.serientracker.data.local.ImportProgressEntity
 import io.github.mario2712.serientracker.data.local.SeasonWithEpisodes
 import io.github.mario2712.serientracker.data.local.SeriesWithSeasons
+import io.github.mario2712.serientracker.data.local.displayTitle
 import io.github.mario2712.serientracker.data.local.counts
 import io.github.mario2712.serientracker.data.local.isWatched
 import io.github.mario2712.serientracker.domain.EpisodeKind
@@ -73,6 +77,7 @@ fun SeriesDetailScreen(
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
     onMatch: (Long) -> Unit,
+    onOpenSeries: (Long) -> Unit = {},
     viewModel: SeriesDetailViewModel = viewModel(factory = AppViewModelProvider.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -81,7 +86,9 @@ fun SeriesDetailScreen(
     var addSpecial by rememberSaveable { mutableStateOf(false) }
     val showExcel by viewModel.showExcel.collectAsStateWithLifecycle()
     val catchUp by viewModel.catchUpMode.collectAsStateWithLifecycle()
-    val title = (state as? SeriesDetailUiState.Loaded)?.data?.series?.title.orEmpty()
+    val title = (state as? SeriesDetailUiState.Loaded)?.data?.series?.displayTitle.orEmpty()
+    var newRun by rememberSaveable { mutableStateOf(false) }
+    val rewatchCounts by viewModel.rewatchCounts.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -103,8 +110,20 @@ fun SeriesDetailScreen(
                         IconButton(onClick = { onEdit(viewModel.seriesId) }) {
                             Icon(Icons.Filled.Edit, contentDescription = "Bearbeiten")
                         }
-                        IconButton(onClick = { confirmDelete = true }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "Löschen")
+                        var menuOpen by remember { mutableStateOf(false) }
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "Mehr")
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Als neuen Durchgang anlegen") },
+                                onClick = { menuOpen = false; newRun = true },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Löschen") },
+                                leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) },
+                                onClick = { menuOpen = false; confirmDelete = true },
+                            )
                         }
                     }
                 },
@@ -130,9 +149,24 @@ fun SeriesDetailScreen(
                     onCountAndWatch = viewModel::countAndWatch,
                     onEpisodeDetails = { selectedEpisodeId = it },
                     onAddSpecial = { addSpecial = true },
+                    rewatchCounts = rewatchCounts,
+                    onWatchSeasonAgain = viewModel::watchSeasonAgain,
                 )
             }
         }
+    }
+
+    if (newRun) {
+        val series = (state as? SeriesDetailUiState.Loaded)?.data?.series
+        DuplicateRunDialog(
+            title = series?.title.orEmpty(),
+            initialWatcher = series?.watcher,
+            onDismiss = { newRun = false },
+            onCreate = { watcher, label ->
+                newRun = false
+                viewModel.duplicate(watcher, label) { onOpenSeries(it) }
+            },
+        )
     }
 
     if (addSpecial) {
@@ -161,9 +195,12 @@ fun SeriesDetailScreen(
             } else {
                 null
             },
+            views = viewModel.views(episode.id).collectAsStateWithLifecycle(emptyList()).value,
             onDismiss = { selectedEpisodeId = null },
             onToggle = { viewModel.toggleEpisode(episode.id, it) },
-            onSetWatchedAt = { viewModel.setWatchedAt(episode.id, it) },
+            onWatchAgain = { viewModel.watchAgain(episode.id) },
+            onDeleteViewing = { viewModel.deleteViewing(episode.id, it) },
+            onSetViewingTime = { viewId, at, zone -> viewModel.setViewingTime(episode.id, viewId, at, zone) },
             onRate = { viewModel.setRating(episode.id, it) },
             onKind = { viewModel.setKind(episode.id, it) },
             onDelete = {
@@ -203,6 +240,8 @@ private fun DetailContent(
     onCountAndWatch: (Long, Int) -> Unit,
     onEpisodeDetails: (Long) -> Unit,
     onAddSpecial: () -> Unit,
+    rewatchCounts: Map<Long, Int> = emptyMap(),
+    onWatchSeasonAgain: (Long) -> Unit = {},
 ) {
     // Hidden episodes do not count anywhere.
     val all = data.seasons.flatMap { s -> s.episodes.filter { it.counts }.map { s.season.number to it } }
@@ -259,6 +298,8 @@ private fun DetailContent(
                 },
                 onToggleSeason = onToggleSeason,
                 onEpisodeDetails = onEpisodeDetails,
+                rewatchCounts = rewatchCounts,
+                onWatchSeasonAgain = { onWatchSeasonAgain(season.season.id) },
             )
         }
         if (data.importProgress == null && data.seasons.isNotEmpty()) {
@@ -289,6 +330,9 @@ private fun Header(data: SeriesWithSeasons, watched: Int, total: Int, message: S
     Column {
         // Full title, wrapping; the top bar shows it in one line only.
         Text(series.title, style = MaterialTheme.typography.headlineSmall)
+        series.label?.takeIf { it.isNotBlank() }?.let {
+            Text(it, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+        }
         series.originalTitle?.takeIf { !it.equals(series.title, ignoreCase = true) }?.let {
             Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -446,6 +490,8 @@ private fun SeasonCard(
     onTapEpisode: (EpisodeEntity) -> Unit,
     onToggleSeason: (Long, Boolean) -> Unit,
     onEpisodeDetails: (Long) -> Unit,
+    rewatchCounts: Map<Long, Int> = emptyMap(),
+    onWatchSeasonAgain: () -> Unit = {},
 ) {
     var expanded by rememberSaveable(season.season.id) { mutableStateOf(initiallyExpanded) }
     val counting = season.episodes.filter { it.counts }
@@ -489,7 +535,11 @@ private fun SeasonCard(
                         episode = ep,
                         onClick = { onTapEpisode(ep) },
                         onLongClick = { onEpisodeDetails(ep.id) },
+                        viewings = 1 + (rewatchCounts[ep.id] ?: 0),
                     )
+                }
+                if (allWatched) {
+                    TextButton(onClick = onWatchSeasonAgain) { Text("Alle Specials nochmal gesehen") }
                 }
             }
         } else if (expanded) {
@@ -504,7 +554,13 @@ private fun SeasonCard(
                         hidden = ep.kind == EpisodeKind.HIDDEN,
                         onClick = { onTapEpisode(ep) },
                         onLongClick = { onEpisodeDetails(ep.id) },
+                        viewings = 1 + (rewatchCounts[ep.id] ?: 0),
                     )
+                }
+            }
+            if (allWatched) {
+                TextButton(onClick = onWatchSeasonAgain, modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)) {
+                    Text("Staffel nochmal gesehen")
                 }
             }
         }

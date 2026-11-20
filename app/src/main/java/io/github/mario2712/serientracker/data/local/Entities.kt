@@ -17,6 +17,8 @@ data class SeriesEntity(
     val title: String,
     /** Original title from TMDB (e.g. "The Queen's Gambit" for "Damengambit"). */
     val originalTitle: String? = null,
+    /** Extra name to tell duplicates apart, e.g. "Rewatch 2026" or "Mario alleine". */
+    val label: String? = null,
     val status: WatchStatus = WatchStatus.PLAN_TO_WATCH,
     /** 1..10, null = not rated. */
     val rating: Int? = null,
@@ -106,7 +108,50 @@ data class EpisodeEntity(
     @ColumnInfo(defaultValue = "0") val isCustom: Boolean = false,
     /** Runtime in minutes, from TMDB. */
     val runtime: Int? = null,
+    /** Time zone where the (first) viewing was ticked; null = [HOME_ZONE]. */
+    val watchedZone: String? = null,
 )
+
+/**
+ * Further viewings of an episode (the first one is stored in [EpisodeEntity.watchedAt]).
+ * Number of viewings = 1 + rows here.
+ */
+@Entity(
+    tableName = "episode_views",
+    foreignKeys = [
+        ForeignKey(
+            entity = EpisodeEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["episodeId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index("episodeId")],
+)
+data class EpisodeViewEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val episodeId: Long,
+    val watchedAt: Long,
+    /** "Watched earlier", no exact date (catch-up mode). */
+    @ColumnInfo(defaultValue = "0") val imported: Boolean = false,
+    val zoneId: String,
+)
+
+/** A real first viewing (id of the episode), for correcting catch-up days. */
+data class WatchMoment(val id: Long, val watchedAt: Long, val watchedZone: String?)
+
+/** Zone for viewings stored before zones were recorded. */
+const val HOME_ZONE = "Europe/Vienna"
+
+/** Zone of the first viewing, falling back to [HOME_ZONE]. */
+val EpisodeEntity.zone: java.time.ZoneId
+    get() = runCatching { java.time.ZoneId.of(watchedZone ?: HOME_ZONE) }.getOrDefault(java.time.ZoneId.of(HOME_ZONE))
+
+fun zoneOf(id: String?): java.time.ZoneId =
+    runCatching { java.time.ZoneId.of(id ?: HOME_ZONE) }.getOrDefault(java.time.ZoneId.of(HOME_ZONE))
+
+/** Series title with the extra name, e.g. "Dark · Rewatch 2026". */
+val SeriesEntity.displayTitle: String get() = label?.takeIf { it.isNotBlank() }?.let { "$title · $it" } ?: title
 
 /** Current version of the TMDB metadata rules (title, original title, genre). */
 const val TMDB_META_VERSION = 1

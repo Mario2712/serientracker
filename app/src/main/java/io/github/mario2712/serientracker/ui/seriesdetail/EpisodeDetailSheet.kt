@@ -48,7 +48,10 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import io.github.mario2712.serientracker.data.local.EpisodeEntity
+import io.github.mario2712.serientracker.data.local.EpisodeViewEntity
+import io.github.mario2712.serientracker.data.local.HOME_ZONE
 import io.github.mario2712.serientracker.data.local.isWatched
+import io.github.mario2712.serientracker.data.local.zoneOf
 import io.github.mario2712.serientracker.domain.EpisodeKind
 import io.github.mario2712.serientracker.domain.Progress
 import java.time.Instant
@@ -70,6 +73,8 @@ fun EpisodeChip(
     hidden: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    /** Number of viewings; shown as "2×" from two on. */
+    viewings: Int = 1,
 ) {
     val haptic = LocalHapticFeedback.current
     val colors = MaterialTheme.colorScheme
@@ -108,6 +113,10 @@ fun EpisodeChip(
                 textDecoration = if (hidden) TextDecoration.LineThrough else null,
                 maxLines = 1,
             )
+            if (viewings > 1 && watched) {
+                Spacer(Modifier.width(4.dp))
+                Text("${viewings}×", style = MaterialTheme.typography.labelSmall, color = colors.primary)
+            }
         }
     }
 }
@@ -115,7 +124,7 @@ fun EpisodeChip(
 /** One special in the specials list: running number, title, air date; tap ticks, long press opens details. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun SpecialRow(number: Int?, episode: EpisodeEntity, onClick: () -> Unit, onLongClick: () -> Unit) {
+fun SpecialRow(number: Int?, episode: EpisodeEntity, onClick: () -> Unit, onLongClick: () -> Unit, viewings: Int = 1) {
     val haptic = LocalHapticFeedback.current
     val hidden = episode.kind == EpisodeKind.HIDDEN
     val watched = episode.isWatched && !hidden
@@ -151,6 +160,7 @@ fun SpecialRow(number: Int?, episode: EpisodeEntity, onClick: () -> Unit, onLong
                 episode.airDate?.let { LocalDate.ofEpochDay(it).format(dateFormat) },
                 "eigenes Special".takeIf { episode.isCustom },
                 episode.rating?.let { "★ $it" },
+                "${viewings}× gesehen".takeIf { viewings > 1 && watched },
                 "ausgeblendet – antippen zum Zählen".takeIf { hidden },
             )
             if (info.isNotEmpty()) {
@@ -177,14 +187,25 @@ fun EpisodeDetailSheet(
     episode: EpisodeEntity,
     /** Running number among the counting specials (season 0), shown as "Special n". */
     specialNumber: Int? = null,
+    /** Further viewings (rewatches); the first viewing is in [episode]. */
+    views: List<EpisodeViewEntity> = emptyList(),
     onDismiss: () -> Unit,
     onToggle: (Boolean) -> Unit,
-    onSetWatchedAt: (Long) -> Unit,
+    onWatchAgain: () -> Unit,
+    /** viewId null = first viewing. */
+    onDeleteViewing: (Long?) -> Unit,
+    /** viewId null = first viewing; time in millis, zone id of the viewing. */
+    onSetViewingTime: (Long?, Long, String) -> Unit,
     onRate: (Int?) -> Unit,
     onKind: (EpisodeKind) -> Unit,
     onDelete: () -> Unit,
 ) {
-    var pickDate by remember { mutableStateOf(false) }
+    // The viewing whose date is being changed (or a new first viewing "with date").
+    var editing by remember { mutableStateOf<Viewing?>(null) }
+    val viewings = buildList {
+        episode.watchedAt?.let { add(Viewing(null, it, episode.watchedZone ?: HOME_ZONE, episode.watchedAtImported)) }
+        views.forEach { add(Viewing(it.id, it.watchedAt, it.zoneId, it.imported)) }
+    }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
@@ -203,13 +224,45 @@ fun EpisodeDetailSheet(
                 episode.airDate?.let { LocalDate.ofEpochDay(it).format(dateFormat) } ?: "unbekannt",
             )
             episode.runtime?.let { Detail("Laufzeit", "$it Minuten") }
-            Detail("Gesehen", watchedText(episode))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Gesehen", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Text(
+                    if (viewings.size > 1) "Gesehen: ${viewings.size}×" else "Gesehen",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
                 Switch(checked = episode.isWatched, onCheckedChange = onToggle)
             }
-            OutlinedButton(onClick = { pickDate = true }) {
-                Text(if (episode.isWatched) "Abhak-Datum ändern" else "Mit Datum abhaken")
+            if (viewings.size > 1) {
+                Text(
+                    "Haken entfernen löscht alle ${viewings.size} Sichtungen.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (viewings.isEmpty()) {
+                Text("noch nicht gesehen", style = MaterialTheme.typography.bodyMedium)
+                OutlinedButton(onClick = { editing = Viewing(null, null, ZoneId.systemDefault().id, false) }) {
+                    Text("Mit Datum abhaken")
+                }
+            }
+            viewings.forEachIndexed { index, v ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            if (viewings.size > 1) "${index + 1}. Sichtung" else "Sichtung",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(viewingText(v), style = MaterialTheme.typography.bodyMedium)
+                    }
+                    TextButton(onClick = { editing = v }) { Text("Datum") }
+                    if (viewings.size > 1) {
+                        TextButton(onClick = { onDeleteViewing(v.viewId) }) { Text("Löschen") }
+                    }
+                }
+            }
+            if (episode.isWatched) {
+                OutlinedButton(onClick = onWatchAgain) { Text("Nochmal gesehen") }
             }
 
             // Same control as the series rating: slider 0..10, 0 = no rating. Saved when released.
@@ -251,35 +304,38 @@ fun EpisodeDetailSheet(
         }
     }
 
-    if (pickDate) {
-        val initial = (episode.watchedAt ?: System.currentTimeMillis()).let {
+    editing?.let { v ->
+        // Dates are shown and changed in the zone where the viewing was ticked.
+        val zone = zoneOf(v.zone)
+        val initial = (v.at ?: System.currentTimeMillis()).let {
             // DatePicker works with UTC midnight of the chosen day.
-            Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
-                .atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+            Instant.ofEpochMilli(it).atZone(zone).toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
         }
         val state = rememberDatePickerState(initialSelectedDateMillis = initial)
         DatePickerDialog(
-            onDismissRequest = { pickDate = false },
+            onDismissRequest = { editing = null },
             confirmButton = {
                 TextButton(onClick = {
-                    pickDate = false
+                    editing = null
                     state.selectedDateMillis?.let { utcMidnight ->
                         val day = Instant.ofEpochMilli(utcMidnight).atZone(ZoneOffset.UTC).toLocalDate()
                         // Keep the original time of day if there was one, otherwise 20:00.
-                        val time = episode.watchedAt
-                            ?.takeUnless { episode.watchedAtImported }
-                            ?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalTime() }
+                        val time = v.at?.takeUnless { v.imported }
+                            ?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalTime() }
                             ?: LocalTime.of(20, 0)
-                        onSetWatchedAt(day.atTime(time).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli())
+                        onSetViewingTime(v.viewId, day.atTime(time).atZone(zone).toInstant().toEpochMilli(), zone.id)
                     }
                 }) { Text("Übernehmen") }
             },
-            dismissButton = { TextButton(onClick = { pickDate = false }) { Text("Abbrechen") } },
+            dismissButton = { TextButton(onClick = { editing = null }) { Text("Abbrechen") } },
         ) {
             DatePicker(state = state)
         }
     }
 }
+
+/** One viewing as shown in the sheet; [viewId] null = first viewing (stored in the episode). */
+private data class Viewing(val viewId: Long?, val at: Long?, val zone: String, val imported: Boolean)
 
 @Composable
 private fun Detail(label: String, value: String) {
@@ -289,12 +345,12 @@ private fun Detail(label: String, value: String) {
     }
 }
 
-private fun watchedText(episode: EpisodeEntity): String {
-    val at = episode.watchedAt ?: return "noch nicht gesehen"
-    val zoned = Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault())
-    return if (episode.watchedAtImported) {
-        "früher gesehen (ohne genaues Datum, erfasst am ${zoned.toLocalDate().format(dateFormat)})"
-    } else {
-        "am ${zoned.format(dateTimeFormat)}"
-    }
+/** Date and time in the zone of the viewing; the zone is named when it differs from the phone's. */
+private fun viewingText(v: Viewing): String {
+    val at = v.at ?: return "noch nicht gesehen"
+    val zone = zoneOf(v.zone)
+    val zoned = Instant.ofEpochMilli(at).atZone(zone)
+    if (v.imported) return "früher gesehen (ohne genaues Datum, erfasst am ${zoned.toLocalDate().format(dateFormat)})"
+    val zoneHint = if (zone.id != ZoneId.systemDefault().id) " (${zone.id})" else ""
+    return "am ${zoned.format(dateTimeFormat)}$zoneHint"
 }

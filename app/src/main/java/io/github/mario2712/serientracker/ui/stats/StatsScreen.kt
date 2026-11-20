@@ -198,6 +198,14 @@ private fun StatsContent(s: Stats, showExcel: Boolean, onOpenSeries: (Long) -> U
         item { RatingComparisonSection(s.extras.ratingComparison, onOpenSeries) }
         item { DelaySection(s.extras.delay, onOpenSeries) }
         item { HeatmapSection(s.extras.heatmap) }
+        if (s.mostWatchedEpisodes.isNotEmpty()) {
+            item {
+                Section("Meistgesehene Folgen") {
+                    Bars(s.mostWatchedEpisodes, unit = "×", onClick = onOpenSeries)
+                    Hint("Mehrfach gesehene Folgen zählen bei Sehzeit, Verlauf und Heatmap mehrfach, bei den gesehenen Folgen einmal.")
+                }
+            }
+        }
         item { Section("Status") { Bars(s.statusCounts, unit = "") } }
         item {
             Section("Stapel der Schande") {

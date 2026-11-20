@@ -3,6 +3,8 @@ package io.github.mario2712.serientracker.data.export
 import androidx.room.withTransaction
 import io.github.mario2712.serientracker.data.local.AppDatabase
 import io.github.mario2712.serientracker.data.local.EpisodeEntity
+import io.github.mario2712.serientracker.data.local.EpisodeViewEntity
+import io.github.mario2712.serientracker.data.local.HOME_ZONE
 import io.github.mario2712.serientracker.data.local.ImportProgressEntity
 import io.github.mario2712.serientracker.data.local.SeasonEntity
 import io.github.mario2712.serientracker.data.local.SeriesEntity
@@ -32,6 +34,7 @@ data class Backup(
 data class BackupSeries(
     val title: String,
     val originalTitle: String? = null,
+    val label: String? = null,
     val status: WatchStatus = WatchStatus.PLAN_TO_WATCH,
     val rating: Int? = null,
     val streamingService: String? = null,
@@ -90,7 +93,14 @@ data class BackupEpisode(
     val kind: EpisodeKind? = null,
     val isCustom: Boolean = false,
     val runtime: Int? = null,
+    /** Zone of the first viewing; missing in older archives (= home zone). */
+    val watchedZone: String? = null,
+    /** Further viewings (rewatches). */
+    val views: List<BackupView> = emptyList(),
 )
+
+@Serializable
+data class BackupView(val watchedAt: Long, val imported: Boolean = false, val zoneId: String = HOME_ZONE)
 
 class BackupFormatException(message: String) : Exception(message)
 
@@ -106,7 +116,9 @@ class BackupRepository(
             formatVersion = FORMAT_VERSION,
             appVersion = appVersion,
             exportedAt = OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
-            series = db.seriesDao().getAllWithSeasons().map(::toBackup),
+            series = db.episodeViewDao().getAll().groupBy { it.episodeId }.let { views ->
+                db.seriesDao().getAllWithSeasons().map { toBackup(it, views) }
+            },
         )
         out.bufferedWriter(Charsets.UTF_8).use { it.write(json.encodeToString(Backup.serializer(), backup)) }
     }
@@ -140,6 +152,7 @@ class BackupRepository(
             SeriesEntity(
                 title = b.title,
                 originalTitle = b.originalTitle,
+                label = b.label,
                 status = b.status,
                 rating = b.rating,
                 streamingService = b.streamingService,
@@ -187,7 +200,7 @@ class BackupRepository(
         }
         b.seasons.forEach { season ->
             val seasonId = episodeDao.insertSeason(SeasonEntity(seriesId = id, number = season.number, title = season.title))
-            episodeDao.insertEpisodesStrict(
+            val episodeIds = episodeDao.insertEpisodesStrict(
                 season.episodes.map {
                     EpisodeEntity(
                         seasonId = seasonId,
@@ -201,17 +214,25 @@ class BackupRepository(
                         kind = it.kind ?: if (season.number == 0) EpisodeKind.SPECIAL else EpisodeKind.REGULAR,
                         isCustom = it.isCustom,
                         runtime = it.runtime,
+                        // Older archives have no zone: their viewings were in the home zone.
+                        watchedZone = if (it.watchedAt != null) it.watchedZone ?: HOME_ZONE else null,
                     )
+                },
+            )
+            db.episodeViewDao().insertAll(
+                season.episodes.zip(episodeIds).flatMap { (ep, episodeId) ->
+                    ep.views.map { EpisodeViewEntity(episodeId = episodeId, watchedAt = it.watchedAt, imported = it.imported, zoneId = it.zoneId) }
                 },
             )
         }
     }
 
-    private fun toBackup(d: SeriesWithSeasons): BackupSeries {
+    private fun toBackup(d: SeriesWithSeasons, views: Map<Long, List<EpisodeViewEntity>>): BackupSeries {
         val s = d.series
         return BackupSeries(
             title = s.title,
             originalTitle = s.originalTitle,
+            label = s.label,
             status = s.status,
             rating = s.rating,
             streamingService = s.streamingService,
@@ -259,6 +280,8 @@ class BackupRepository(
                             kind = it.kind,
                             isCustom = it.isCustom,
                             runtime = it.runtime,
+                            watchedZone = it.watchedZone,
+                            views = views[it.id].orEmpty().map { v -> BackupView(v.watchedAt, v.imported, v.zoneId) },
                         )
                     },
                 )
