@@ -46,6 +46,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import io.github.mario2712.serientracker.ui.AppViewModelProvider
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -178,7 +179,7 @@ fun EditSeriesScreen(
                 Slider(
                     value = (form.rating ?: 0).toFloat(),
                     onValueChange = { v ->
-                        val r = v.toInt()
+                        val r = v.roundToInt() // snapped values can be 7.9999995 instead of 8
                         viewModel.update { it.copy(rating = if (r == 0) null else r) }
                     },
                     valueRange = 0f..10f,
