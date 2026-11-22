@@ -3,6 +3,11 @@
 Neue Version: `version.txt` anheben und hier einen Abschnitt `## x.y.z` ergänzen.
 Nach dem Merge auf `main` erstellt CI daraus automatisch das Release `vx.y.z` mit APK.
 
+## 1.2.2
+
+- Bewertungs-Schieberegler (Folgen und Serien): Der Wert springt nicht mehr gelegentlich eine Stufe zurück
+  (z. B. 8 → 7), sondern bleibt dort, wo du loslässt.
+
 ## 1.2.1
 
 - Rückfrage „Serie schon vorhanden“: Die drei Buttons („Vorhandene öffnen“, „Trotzdem neu anlegen“, „Abbrechen“)

@@ -60,6 +60,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import kotlin.math.roundToInt
 
 private val dateFormat = DateTimeFormatter.ofPattern("dd.MM.yyyy")
 private val dateTimeFormat = DateTimeFormatter.ofPattern("dd.MM.yyyy, HH:mm 'Uhr'")
@@ -266,15 +267,16 @@ fun EpisodeDetailSheet(
             }
 
             // Same control as the series rating: slider 0..10, 0 = no rating. Saved when released.
+            // Snapped values can be 7.9999995 instead of 8: round, never truncate.
             var rating by remember(episode.id, episode.rating) { mutableStateOf((episode.rating ?: 0).toFloat()) }
             Text(
-                "Bewertung: " + (rating.toInt().takeIf { it > 0 }?.let { "$it/10" } ?: "keine"),
+                "Bewertung: " + (rating.roundToInt().takeIf { it > 0 }?.let { "$it/10" } ?: "keine"),
                 style = MaterialTheme.typography.titleSmall,
             )
             Slider(
                 value = rating,
                 onValueChange = { rating = it },
-                onValueChangeFinished = { onRate(rating.toInt().takeIf { it > 0 }) },
+                onValueChangeFinished = { onRate(rating.roundToInt().takeIf { it > 0 }) },
                 valueRange = 0f..10f,
                 steps = 9,
             )
